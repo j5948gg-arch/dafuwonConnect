@@ -56,9 +56,9 @@ function aiStep() {
   const c = p.cash, own = t.type === 'land' ? owner[t.id] : undefined;
   if (t.type === 'land' && own === undefined && c >= t.price + 3000) return buyLand();
   if (t.type === 'land' && own !== undefined && own !== i && c >= MAP.BUYOUT_MULT * t.price + 15000 && (lv[t.id] || 0) <= MAP.BUYOUT_MAX_LV) return buyout();
-  if (!upUsed) {
-    const pool = t.type === 'start' || (t.type === 'stock' && noTrade()) ? lands(i) : t.type === 'land' && own === i && justBought !== t.id ? [t] : [];
-    const ok = pool.filter((x) => (lv[x.id] || 0) < 5 && c >= upOf(x) + 5000);
+  if (!upFull()) {
+    const pool = t.type === 'start' || (t.type === 'stock' && noTrade()) || onOwnS() ? lands(i) : t.type === 'land' && own === i && justBought !== t.id ? [t] : [];
+    const ok = pool.filter((x) => (lv[x.id] || 0) < 5 && x.id !== justBought && !upIds.includes(x.id) && c >= upOf(x) + 5000);
     if (ok.length) return upgradeAt(pick1(ok).id);
   }
   if (t.type === 'gem' && !flipUsed) {

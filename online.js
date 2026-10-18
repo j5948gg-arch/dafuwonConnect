@@ -15,7 +15,7 @@ closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, first, choices, busy, logs, need } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, first, choices, busy, logs, need } = s);
 }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
