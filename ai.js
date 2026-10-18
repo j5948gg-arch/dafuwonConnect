@@ -24,7 +24,7 @@ function safeAct(fn, a, ex) {
       return allocOk();
     case 'trade':
       if (!reg(a[0]) || (a[1] !== 1 && a[1] !== -1)) return;
-      qty[a[0]] = Math.max(1, Math.min(MAXH, Math.floor(+(ex && ex.q) || 1)));
+      qty[a[0]] = Math.max(1, Math.min(MAXT, Math.floor(+(ex && ex.q) || 1)));
       return trade(a[0], a[1]);
     case 'sellStock': return reg(a[0]) && int(a[1]) && a[1] > 0 && sellStock(a[0], a[1]);
     case 'sellEnough': return reg(a[0]) && sellEnough(a[0]);
@@ -55,9 +55,9 @@ function aiStep() {
   if (phase !== 'act') return;
   const c = p.cash, own = t.type === 'land' ? owner[t.id] : undefined;
   if (t.type === 'land' && own === undefined && c >= t.price + 3000) return buyLand();
-  if (t.type === 'land' && own !== undefined && own !== i && c >= MAP.BUYOUT_MULT * t.price + 15000) return buyout();
+  if (t.type === 'land' && own !== undefined && own !== i && c >= MAP.BUYOUT_MULT * t.price + 15000 && (lv[t.id] || 0) <= MAP.BUYOUT_MAX_LV) return buyout();
   if (!upUsed) {
-    const pool = t.type === 'start' ? lands(i) : t.type === 'land' && own === i && justBought !== t.id ? [t] : [];
+    const pool = t.type === 'start' || (t.type === 'stock' && noTrade()) ? lands(i) : t.type === 'land' && own === i && justBought !== t.id ? [t] : [];
     const ok = pool.filter((x) => (lv[x.id] || 0) < 5 && c >= upOf(x) + 5000);
     if (ok.length) return upgradeAt(pick1(ok).id);
   }
@@ -65,7 +65,7 @@ function aiStep() {
     const free = deck.map((d, k) => (d.by < 0 ? k : -1)).filter((k) => k >= 0);
     if (free.length) return flipAt(pick1(free));
   }
-  if (t.type === 'stock' && aiTrade()) return;
+  if (t.type === 'stock' && !upUsed && aiTrade()) return;
   return endTurn();
 }
 
@@ -74,7 +74,7 @@ function aiTrade() {
   const p = P[turn], c = p.cash;
   for (const r of RK) {
     if (traded[r]) continue;
-    const q = Math.min(MAXH - p.st[r], Math.floor((c - 8000) * 0.3 / stock[r]));
+    const q = Math.min(MAXH - p.st[r], MAXT, Math.floor((c - 8000) * 0.3 / stock[r]));
     if (q >= 1) { qty[r] = q; trade(r, 1); return true; }
     traded[r] = true;
   }

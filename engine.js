@@ -7,7 +7,7 @@ const C=['#e74c3c','#3498db','#2ecc71','#e6a800'];
 const SX=108,SY=94,W=100,H=80,PAD=10,VW=PAD*2+W+6*SX,VH=PAD*2+H+6*SY;
 const cx=t=>PAD+W/2+(t.x+3)*SX, cy=t=>PAD+H/2+(3-t.y)*SY;
 const T=MAP.TILES, RK=Object.keys(MAP.REGIONS), RN=r=>MAP.REGIONS[r].name, IM=MAP.IMPACT, $=s=>document.querySelector(s);
-const START_CASH=40000, MAXH=99, money=n=>n.toLocaleString('en-US');
+const START_CASH=40000, MAXH=999, MAXT=99, money=n=>n.toLocaleString('en-US');
 let P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,flipUsed,justBought,lastCard,stock,turn,phase,left,dice,first,choices,busy,logs,need,qty,np=2,force='0';
 
 function reset(){
@@ -89,26 +89,30 @@ function endTurn(){
 /* ---------- 起點、勝利、股價 ---------- */
 function passStart(i){
   const p=P[i];
+  // 1) 先以目前資產判斷是否達成勝利條件
+  if(assets(i)>=MAP.WIN_ASSETS){phase='over';winner=i;choices=null;left=0;log(`玩家${i+1} 總資產 ${money(assets(i))}，經過起點，獲得勝利！`);render();return true;}
+  // 2) 未達成才發放寶石等級獎勵（獎勵不影響本次判定）
   if(MAP.GEM_KEYS.every(k=>p.gems[k])){
     const b=MAP.gemBonus(p.level);p.cash+=b;p.level++;p.gems={};pendingTrade=true;
     log(`玩家${i+1} 集滿四顆寶石！獎金 ${money(b)}，升為 Lv.${p.level}，並獲得一次額外股市買賣機會`);
   }
-  if(assets(i)>=MAP.WIN_ASSETS){phase='over';winner=i;choices=null;left=0;log(`玩家${i+1} 總資產 ${money(assets(i))}，經過起點，獲得勝利！`);render();return true;}
   return false;
 }
 function bump(r,pct){
-  const o=stock[r];sf[r]=Math.max(50,Math.min(800,sf[r]*(1+pct)));stock[r]=Math.round(sf[r]);
+  const o=stock[r];sf[r]=Math.max(50,sf[r]*(1+pct));stock[r]=Math.round(sf[r]);
   if(stock[r]!==o)chg[r]=stock[r]-o;
 }
+const noTrade=()=>!Object.keys(traded).length;
+const canUpHere=id=>{const q=T[P[turn].pos];return q.type==='start'||(q.type==='land'&&q.id===id)||(q.type==='stock'&&noTrade());};
 function upgradeAt(id){
   const t=T[id],l=lv[id]||0;
-  if(phase!=='act'||need||upUsed||owner[id]!==turn||l>=5||justBought===id)return;
+  if(phase!=='act'||need||upUsed||owner[id]!==turn||l>=5||justBought===id||!canUpHere(id))return;
   const c=upOf(t);
   spend(c,`升級 ${t.name} 為 ${MAP.LEVELS[l+1]} 級`,()=>{P[turn].cash-=c;inv[id]=(inv[id]||0)+c;lv[id]=l+1;upUsed=true;bump(t.region,IM.upgrade);log(`玩家${turn+1} 升級 ${t.name}：${MAP.LEVELS[l]}→${MAP.LEVELS[l+1]}（${money(c)}）`);});
 }
 function buyout(){
   const p=P[turn],t=T[p.pos],o=owner[t.id];
-  if(phase!=='act'||need||t.type!=='land'||o===undefined||o===turn)return;
+  if(phase!=='act'||need||t.type!=='land'||o===undefined||o===turn||(lv[t.id]||0)>MAP.BUYOUT_MAX_LV)return;
   const c=MAP.BUYOUT_MULT*t.price;
   spend(c,`強制併購 ${t.name}`,()=>{p.cash-=c;P[o].cash+=c;owner[t.id]=turn;justBought=t.id;bump(t.region,IM.buyout);log(`玩家${turn+1} 強制併購 ${t.name}，付給玩家${o+1} ${money(c)}`);});
 }
@@ -136,7 +140,7 @@ const allocSum=()=>RK.reduce((s,r)=>s+alloc.vals[r],0);
 const allocTxt=()=>`已分配 ${allocSum()} / ${alloc.total}（${allocSum()===alloc.total?'可確定':'需剛好等於總數'}）`;
 function allocModal(){
   return `<div class="md"><div class="box"><b>重新分配股票</b><p>共 ${alloc.total} 張，每區最多 ${MAXH}。</p>`+
-    RK.map((r,k)=>`<div>${k+1}區 ${RN(r)} <input type="number" min="0" max="99" value="${alloc.vals[r]}" oninput="allocSet('${r}',this.value)"></div>`).join('')+
+    RK.map((r,k)=>`<div>${k+1}區 ${RN(r)} <input type="number" min="0" max="${MAXH}" value="${alloc.vals[r]}" oninput="allocSet('${r}',this.value)"></div>`).join('')+
     `<p id="al_rem">${allocTxt()}</p><button class="big" id="al_ok" onclick="allocOk()" ${allocSum()===alloc.total?'':'disabled'}>確定</button></div></div>`;
 }
 function allocSet(r,v){alloc.vals[r]=Math.max(0,Math.min(MAXH,Math.floor(+v||0)));$('#al_rem').innerHTML=allocTxt();$('#al_ok').disabled=allocSum()!==alloc.total;}
@@ -148,7 +152,7 @@ const alive=()=>P.map((_,j)=>j).filter(j=>P[j].alive);
 const others=i=>alive().filter(j=>j!==i);
 const rnd=a=>a[Math.random()*a.length|0];
 const addSt=(i,r,n)=>{const g=Math.min(n,MAXH-P[i].st[r]);P[i].st[r]+=g;log(`玩家${i+1} 獲得${RN(r)}股票 ${g} 張`);};
-const setPrice=(r,v)=>{const o=stock[r];sf[r]=Math.max(50,Math.min(800,v));stock[r]=Math.round(sf[r]);if(stock[r]!==o)chg[r]=stock[r]-o;log(`${RN(r)}股價 ${o}→${stock[r]}`);};
+const setPrice=(r,v)=>{const o=stock[r];sf[r]=Math.max(50,v);stock[r]=Math.round(sf[r]);if(stock[r]!==o)chg[r]=stock[r]-o;log(`${RN(r)}股價 ${o}→${stock[r]}`);};
 const tm=(r,f)=>{tollMod[r]=Math.max(.25,Math.min(4,(tollMod[r]||1)*f));log(`${RN(r)}過路費倍率 ${tollMod[r].toFixed(2)}`);};
 const dropLand=id=>{delete owner[id];delete lv[id];delete inv[id];delete landMod[id];};
 const teleportPrev=id=>{const tri=MAP.TRIS.find(g=>g.includes(id));return tri?MAP.ADJ[id].find(n=>!tri.includes(n)):MAP.ADJ[id][0];};
@@ -250,10 +254,10 @@ function cardBox(){
 
 const chgTxt=r=>chg[r]?` <small style="color:${chg[r]>0?'#e04b4b':'#2aa86a'}">${chg[r]>0?'▲':'▼'}${Math.abs(chg[r])}</small>`:'';
 function costTxt(r){
-  const p=P[turn],q=Math.max(1,Math.min(MAXH,qty[r]|0)),c=q*stock[r];
+  const p=P[turn],q=Math.max(1,Math.min(MAXT,qty[r]|0)),c=q*stock[r];
   return `預購 ${q} 股：<b>${money(c)}</b>`+(p.cash>=c?`（買後餘 ${money(p.cash-c)}）`:`<span style="color:#e04b4b">（現金差 ${money(c-p.cash)}）</span>`)+`｜賣出可得 ${money(Math.min(q,p.st[r])*stock[r])}`;
 }
-function setQty(r,v){qty[r]=Math.max(1,Math.min(MAXH,+v||1));$('#c_'+r).innerHTML=costTxt(r);}
+function setQty(r,v){qty[r]=Math.max(1,Math.min(MAXT,+v||1));$('#c_'+r).innerHTML=costTxt(r);}
 
 /* ---------- 買賣 ---------- */
 function spend(amount,desc,done){
@@ -270,9 +274,9 @@ function openTrade(){extraOn=true;traded={};resumeMove=false;log(`玩家${turn+1
 function closeExtra(){if(!extraOn)return;extraOn=false;if(resumeMove){resumeMove=false;step();return;}render();}
 function trade(r,sign){
   const p=P[turn];
-  if(!(phase==='act'||(phase==='move'&&extraOn))||need||!(T[p.pos].type==='stock'||extraOn))return;
+  if(!(phase==='act'||(phase==='move'&&extraOn))||need||!((T[p.pos].type==='stock'&&!upUsed)||extraOn))return;
   if(traded[r]){log(`${RN(r)} 本次已交易，暫時關閉`);return render();}
-  let q=Math.max(1,Math.min(MAXH,qty[r]|0));
+  let q=Math.max(1,Math.min(MAXT,qty[r]|0));
   if(sign>0){
     q=Math.min(q,MAXH-p.st[r]);
     if(q<1){log(`${RN(r)} 持股已達上限 ${MAXH}`);return render();}
@@ -332,7 +336,7 @@ function modal(){
   let body='';
   if(p.cash>=need.amount)body=`<p>現金已足夠。</p><button class="big" onclick="confirmNeed()">確認${need.desc}</button>`;
   else if(hasStock(need.who))body=`<p>是否賣出股票？（尚有股票時不能賣地）</p><table>`+RK.filter(r=>p.st[r]>0).map(r=>
-    `<tr><td>${RN(r)}</td><td>${p.st[r]} 股 × ${stock[r]}</td><td><button onclick="sellStock('${r}',1)">賣1</button><button onclick="sellEnough('${r}')">賣到夠</button><button onclick="sellStock('${r}',99)">全賣</button></td></tr>`).join('')+`</table>`;
+    `<tr><td>${RN(r)}</td><td>${p.st[r]} 股 × ${stock[r]}</td><td><button onclick="sellStock('${r}',1)">賣1</button><button onclick="sellEnough('${r}')">賣到夠</button><button onclick="sellStock('${r}',${p.st[r]})">全賣</button></td></tr>`).join('')+`</table>`;
   else body=`<p>已無股票可賣，可賣出土地（地價＋升級投入）：</p>`+lands(need.who).map(t=>`<button onclick="sellLand(${t.id})">賣 ${t.name} +${money(landVal(t))}</button>`).join('');
   const cancel=need.forced?'':`<button onclick="cancelNeed()">取消</button>`;
   return `<div class="md"><div class="box"><b>現金不足</b><p>${need.desc}需要 ${money(need.amount)}，現金 ${money(p.cash)}，還差 <b>${money(Math.max(0,short))}</b>。</p>${body}<div>${cancel}</div></div></div>`;
@@ -346,7 +350,7 @@ function render(){
   else if(phase==='roll'){const o=MAP.options(p.pos,p.prev,true);if(o.length>1)arrows=o.map(to=>arrow(p.pos,to,false)).join('');}
   $('#bd').innerHTML=`<svg viewBox="0 0 ${VW} ${VH}">${lines}${T.map(tileSvg).join('')}${arrows}</svg>${cardBox()}`;
 
-  const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&(t.type==='stock'||extraOn);
+  const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&((t.type==='stock'&&!upUsed)||extraOn);
   let act='';
   if(phase==='over'){
     const ord=[winner,...P.map((_,i)=>i).filter(i=>i!==winner).sort((a,b)=>assets(b)-assets(a))];
@@ -361,11 +365,15 @@ function render(){
     else if(t.type==='land'&&own===turn){
       const l=lv[t.id]||0;
       act+=l>=5?'<div>已是最高級 S（商業區）</div>':justBought===t.id?'<div>剛買下，下次再踩到才能升級</div>':upUsed?'<div>本回合已升級過</div>':`<button class="big" onclick="upgradeAt(${t.id})">升級 ${LV[l]}→${LV[l+1]}（${MAP.LEVEL_NAMES[l+1]}）${money(upOf(t))}</button>`;
-    }else if(t.type==='land')act+=`<button class="big" onclick="buyout()">強制併購 ${money(MAP.BUYOUT_MULT*t.price)}</button><div style="font-size:12px">原價×${MAP.BUYOUT_MULT}，付給玩家${own+1}</div>`;
+    }else if(t.type==='land')act+=(lv[t.id]||0)>MAP.BUYOUT_MAX_LV?`<div>此地為 ${LV[lv[t.id]||0]} 級，只有 D、E 級土地可被強制併購</div>`:`<button class="big" onclick="buyout()">強制併購 ${money(MAP.BUYOUT_MULT*t.price)}</button><div style="font-size:12px">原價×${MAP.BUYOUT_MULT}，付給玩家${own+1}（僅限 D、E 級）</div>`;
     if(t.type==='gem')act+=flipUsed?'<div>本回合已翻牌</div>':'<div class="hint">請在地圖下方的翻牌區點選一個數字</div>';
     if(t.type==='start'){
       const ls=lands(turn).filter(x=>(lv[x.id]||0)<5);
       act+=upUsed?'<div>本回合已升級過</div>':ls.length?'<div>起點：可升級一塊地</div>'+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'<div>沒有可升級的土地</div>';
+    }
+    if(t.type==='stock'){
+      const ls=lands(turn).filter(x=>(lv[x.id]||0)<5&&x.id!==justBought);
+      act+=upUsed?'<div>本回合已升級過（本次不能買賣股票）</div>':!noTrade()?'<div>已買賣股票，本次不能升級土地</div>':ls.length?'<div class="hint">不買賣股票時，可改為升級一處土地（升級後本次不能買賣股票）</div>'+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'';
     }
     if(trading)act+='<div class="hint">可於下方交易股票</div>';
     if(extraOn)act+='<button onclick="closeExtra()">結束股市交易</button>';
@@ -373,8 +381,8 @@ function render(){
   }
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">玩家${turn+1}</b>${nameOf(turn)}　<span class="dice">🎲 ${dice||'-'}</span><br>${act}</div>`;
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
-  const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><b>玩家${i+1}</b>${nameOf(i)}${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 100000，經過或停留起點即獲勝</b>':''}</div>`}).join('');
-  const stk=`<div class="box"><b>股市</b>（每區每人上限 ${MAXH} 股；股價隨買賣、升級、過路費波動）<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
+  const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><b>玩家${i+1}</b>${nameOf(i)}${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 ${money(MAP.WIN_ASSETS)}，經過或停留起點即獲勝</b>':''}</div>`}).join('');
+  const stk=`<div class="box"><b>股市</b>（每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股；股價隨買賣、升級、過路費波動）<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
     RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${(tollMod[r]||1).toFixed(2)}</td>${P.map(q=>`<td>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`+
     (trading?'<hr>'+RK.map(r=>traded[r]?`<div>${RN(r)} 🔒 本次已交易，暫時關閉</div>`:`<div>${RN(r)} <input type="number" min="1" max="99" value="${qty[r]}" oninput="setQty('${r}',this.value)">
       <button onclick="trade('${r}',1)">買</button><button onclick="trade('${r}',-1)">賣</button><button onclick="qty['${r}']=99;render()">99</button><div style="font-size:12px" id="c_${r}">${costTxt(r)}</div></div>`).join('')+'<div style="font-size:12px">每區每次停留只能交易一次（買或賣擇一）</div>':'')+`</div>`;
