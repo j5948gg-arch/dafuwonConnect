@@ -88,7 +88,7 @@
   const upCost = (t, lv, sp) => r10(t.price * UP_RATE[lv] * sp / STOCK_REF);
   const GEM_KEYS = Object.keys(GEMS);
   const gemBonus = (level) => 3000 * level;     // 集滿四寶石經過起點的獎金（玩家等級從 1 開始）
-  const WIN_ASSETS = 100000;
+  const WIN_ASSETS = 200000;
   const BUYOUT_MULT = 5;                        // 強制併購 = 原始地價 × 5
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.02, buyout: 0.02, toll: 0.01, perShare: 0.0005 };
