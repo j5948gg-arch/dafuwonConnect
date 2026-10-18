@@ -77,9 +77,9 @@
 
   // ---- 經濟規則 ----
   const LEVELS = ['E', 'D', 'C', 'B', 'A', 'S'];
-  const LEVEL_NAMES = ['平地', '小樓房', '小公寓', '大樓', '住宅區', '商業區'];
+  const LEVEL_NAMES = ['平地', '樓房', '公寓', '大樓', '住宅區', '商業區'];
   const STOCK_REF = 225;                       // 股價基準（初始 150~300 的中間值）
-  const TOLL_MULT = [3, 9, 27, 81, 150, 250]; // 各等級 E,D,C,B,A,S 的過路費倍率（標準股價下，A 級：最便宜的地 10500、最貴的地 30000）
+  const TOLL_MULT = [3, 9, 30, 90, 150, 300]; // 各等級 E,D,C,B,A,S 的過路費倍率（標準股價下，A 級：最便宜的地 10500、最貴的地 30000）
   const UP_RATE = [0.30, 0.40, 0.55, 0.75, 1.00]; // 升到下一級的費用 = 地價 × 此比率
   const r10 = (n) => Math.max(10, Math.round(n / 10) * 10);
   // 過路費 = 地價 10% × 等級倍率 × (該區股價 / 基準)
@@ -92,7 +92,7 @@
   const BUYOUT_MULT = 5;                        // 強制併購 = 原始地價 × 5
   const BUYOUT_MAX_LV = 0;                      // 僅限等級 E(0) 的土地可被強制併購
   // 股價隨行為浮動的幅度（比例）
-  const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.02, buyout: 0.02, toll: 0.01, perShare: 0.0005 };
+  const IMPACT = { buyLand: 0.2, upgrade: 0.3, sellLand: 0.2, buyout: 0.2, toll: 0.1, perShare: 0.0005 };
 
   const MAP = { REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT };
   if (typeof module !== 'undefined') module.exports = MAP;
