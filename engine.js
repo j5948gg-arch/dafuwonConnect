@@ -1,5 +1,5 @@
 let NAMES=[],ME=-1;const LVC=['#8e44ad','#2e86de','#27ae60','#f1c40f','#f08a00','#e0262d']; // E→S：紫、藍、綠、黃、橙、紅
-let extraOn=false;
+let extraOn=false,pendingTrade=false,resumeMove=false;
 const monoOwner=r=>{const ls=T.filter(t=>t.type==='land'&&t.region===r),o=owner[ls[0].id];return o!==undefined&&ls.every(t=>owner[t.id]===o)?o:-1;};
 const nameOf=i=>NAMES[i]?'｜'+NAMES[i]:'';
 
@@ -11,10 +11,10 @@ const START_CASH=40000, MAXH=99, money=n=>n.toLocaleString('en-US');
 let P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,flipUsed,justBought,lastCard,stock,turn,phase,left,dice,first,choices,busy,logs,need,qty,np=2,force='0';
 
 function reset(){
-  P=Array.from({length:np},()=>({pos:0,prev:null,cash:START_CASH,alive:true,gems:{},level:1,extra:0,st:Object.fromEntries(RK.map(r=>[r,0]))}));
+  P=Array.from({length:np},()=>({pos:0,prev:null,cash:START_CASH,alive:true,gems:{},level:1,st:Object.fromEntries(RK.map(r=>[r,0]))}));
   owner={};lv={};inv={};winner=-1;chg=Object.fromEntries(RK.map(r=>[r,0]));stock=Object.fromEntries(RK.map(r=>[r,150+(Math.random()*151|0)]));
   qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;upUsed=flipUsed=false;justBought=-1;lastCard='';newDeck();
-  turn=0;phase='roll';left=0;dice=0;first=true;choices=null;busy=false;need=null;extraOn=false;
+  turn=0;phase='roll';left=0;dice=0;first=true;choices=null;busy=false;need=null;extraOn=false;pendingTrade=false;resumeMove=false;
   logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];render();
 }
 const nm=id=>id==null?'—':T[id].name;
@@ -47,6 +47,7 @@ function go(to){
   choices=null;p.prev=p.pos;p.pos=to;left--;first=false;
   if(tt.type==='gem'&&!p.gems[tt.gem]){p.gems[tt.gem]=1;log(`玩家${turn+1} 獲得${MAP.GEMS[tt.gem].name}`);}
   if(tt.type==='start'&&passStart(turn))return;
+  if(pendingTrade){pendingTrade=false;extraOn=true;traded={};resumeMove=true;render();return;}
   busy=true;render();
   setTimeout(()=>{busy=false;step();},260);
 }
@@ -78,7 +79,7 @@ function bankrupt(i,to){
   else endTurn();
 }
 function endTurn(){
-  if(phase==='over'||need||ask||alloc)return;
+  if(phase==='over'||need||ask||alloc||extraOn)return;
   const old=turn;do{turn=(turn+1)%np;}while(!P[turn].alive);
   upUsed=false;flipUsed=false;justBought=-1;traded={};extraOn=false;
   if(deck.every(d=>d.by>=0)){newDeck();log('49 張牌已翻完，重新洗牌');}
@@ -89,7 +90,7 @@ function endTurn(){
 function passStart(i){
   const p=P[i];
   if(MAP.GEM_KEYS.every(k=>p.gems[k])){
-    const b=MAP.gemBonus(p.level);p.cash+=b;p.level++;p.gems={};p.extra=(p.extra||0)+1;
+    const b=MAP.gemBonus(p.level);p.cash+=b;p.level++;p.gems={};pendingTrade=true;
     log(`玩家${i+1} 集滿四顆寶石！獎金 ${money(b)}，升為 Lv.${p.level}，並獲得一次額外股市買賣機會`);
   }
   if(assets(i)>=MAP.WIN_ASSETS){phase='over';winner=i;choices=null;left=0;log(`玩家${i+1} 總資產 ${money(assets(i))}，經過起點，獲得勝利！`);render();return true;}
@@ -156,6 +157,7 @@ function arrive(i){
   const p=P[i],tt=T[p.pos];
   if(tt.type==='gem'&&!p.gems[tt.gem]){p.gems[tt.gem]=1;log(`玩家${i+1} 獲得${MAP.GEMS[tt.gem].name}`);}
   if(tt.type==='start'&&passStart(i))return;
+  if(pendingTrade){pendingTrade=false;extraOn=true;traded={};resumeMove=true;phase='move';left=0;render();return;}
   land();
 }
 function teleport(i,id){P[i].pos=id;P[i].prev=teleportPrev(id);log(`玩家${i+1} 傳送到 ${nm(id)}`);arrive(i);}
@@ -217,7 +219,7 @@ function buildCards(){
   add('計算所持有股票數量後隨意分配',i=>allocStart(i));
   add('與指定玩家交換位置',i=>pickP('與哪位玩家交換位置？',others(i),j=>{
     const a=[P[i].pos,P[i].prev];P[i].pos=P[j].pos;P[i].prev=P[j].prev;P[j].pos=a[0];P[j].prev=a[1];log(`玩家${i+1} 與玩家${j+1} 交換位置`);arrive(i);}));
-  add('額外獲得一次股市買賣機會',i=>{P[i].extra=(P[i].extra||0)+1;log(`玩家${i+1} 獲得一次額外股市買賣機會`);});
+  add('額外獲得一次股市買賣機會',()=>openTrade());
   return c;
 }
 function newDeck(){
@@ -264,11 +266,11 @@ function buyLand(){
   if(phase!=='act'||need||t.type!=='land'||owner[t.id]!==undefined)return;
   spend(t.price,`買下 ${t.name}`,()=>{P[turn].cash-=t.price;owner[t.id]=turn;justBought=t.id;bump(t.region,IM.buyLand);log(`玩家${turn+1} 買下 ${t.name}（${money(t.price)}）`);});
 }
-function useExtra(){const p=P[turn];if(phase!=='act'||need||ask||alloc||extraOn||!(p.extra>0))return;p.extra--;extraOn=true;traded={};log(`玩家${turn+1} 使用額外股市買賣機會`);render();}
-function closeExtra(){if(!extraOn)return;extraOn=false;render();}
+function openTrade(){extraOn=true;traded={};resumeMove=false;log(`玩家${turn+1} 獲得一次股市買賣機會`);}
+function closeExtra(){if(!extraOn)return;extraOn=false;if(resumeMove){resumeMove=false;step();return;}render();}
 function trade(r,sign){
   const p=P[turn];
-  if(phase!=='act'||need||!(T[p.pos].type==='stock'||extraOn))return;
+  if(!(phase==='act'||(phase==='move'&&extraOn))||need||!(T[p.pos].type==='stock'||extraOn))return;
   if(traded[r]){log(`${RN(r)} 本次已交易，暫時關閉`);return render();}
   let q=Math.max(1,Math.min(MAXH,qty[r]|0));
   if(sign>0){
@@ -308,7 +310,7 @@ function arrow(from,to,active){
 function tileSvg(t){
   const x=cx(t)-W/2,y=cy(t)-H/2;
   let fill='#e6e6e6',sub='',sub2='',icon='',badge='';
-  if(t.type==='land'){fill=MAP.REGIONS[t.region].color;const ow=owner[t.id]!==undefined;sub=ow?RN(t.region)+(monoOwner(t.region)>=0?'｜獨佔×2':''):`${RN(t.region)}｜地價 ${money(t.price)}`;sub2=ow?money(tollOf(t)):'';
+  if(t.type==='land'){fill=MAP.REGIONS[t.region].color;const ow=owner[t.id]!==undefined;sub=ow?RN(t.region):`${RN(t.region)}｜地價 ${money(t.price)}`;sub2=ow?money(tollOf(t)):'';
     badge=(l=>`<rect x="${x+4}" y="${y+4}" width="22" height="19" rx="5" fill="${LVC[l]}" stroke="#fff" stroke-width="1.5"/><text x="${x+15}" y="${y+18}" font-size="14" font-weight="800" fill="${l===3?'#222':'#fff'}" text-anchor="middle">${MAP.LEVELS[l]}</text>`)(lv[t.id]||0);}
   if(t.type==='gem'){fill=MAP.GEMS[t.gem].color;sub=t.region?RN(t.region):'特殊';icon='💎';}
   if(t.type==='stock'){fill='#d4dae2';icon='📈';sub='可交易股票';}
@@ -322,7 +324,7 @@ function tileSvg(t){
   return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${fill}" stroke="${cur?C[turn]:'#8a8a82'}" stroke-width="${cur?4:1.5}"/>
    <text x="${cx(t)}" y="${y+31}" font-size="${t.name.length>4?12:15}" font-weight="700" fill="${tc}" text-anchor="middle">${icon} ${t.name}</text>
    <text x="${cx(t)}" y="${y+43}" font-size="11" fill="${tc}" text-anchor="middle" opacity=".85">${sub}</text>
-   <text x="${cx(t)}" y="${y+60}" font-size="17" font-weight="800" fill="#c0151f" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sub2}</text>${badge}${flag}${tok}`;
+   <text x="${cx(t)}" y="${y+60}" font-size="17" font-weight="800" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sub2}</text>${badge}${flag}${tok}`;
 }
 function modal(){
   if(!need)return '';
@@ -344,14 +346,14 @@ function render(){
   else if(phase==='roll'){const o=MAP.options(p.pos,p.prev,true);if(o.length>1)arrows=o.map(to=>arrow(p.pos,to,false)).join('');}
   $('#bd').innerHTML=`<svg viewBox="0 0 ${VW} ${VH}">${lines}${T.map(tileSvg).join('')}${arrows}</svg>${cardBox()}`;
 
-  const trading=phase==='act'&&!need&&(t.type==='stock'||extraOn);
+  const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&(t.type==='stock'||extraOn);
   let act='';
   if(phase==='over'){
     const ord=[winner,...P.map((_,i)=>i).filter(i=>i!==winner).sort((a,b)=>assets(b)-assets(a))];
     act='<b>遊戲結束</b><br>'+ord.map((i,k)=>`${k+1}. <b style="color:${C[i]}">玩家${i+1}</b> ${money(assets(i))}${k===0?' 🏆':''}`).join('<br>');
   }
   else if(choices)act=`<div class="hint">請點選箭頭決定方向（剩 ${left} 步）</div>`;
-  else if(phase==='move')act=`<div>移動中…剩 ${left} 步</div>`;
+  else if(phase==='move')act=extraOn?`<div class="hint">先進行股票交易（還剩 ${left} 步）</div><button class="big" onclick="closeExtra()">結束股市交易，繼續前進</button>`:`<div>移動中…剩 ${left} 步</div>`;
   else if(phase==='roll')act=`<button class="big" onclick="roll()" ${busy?'disabled':''}>擲骰</button>`;
   else{
     const own=t.type==='land'?owner[t.id]:undefined,LV=MAP.LEVELS;
@@ -366,11 +368,11 @@ function render(){
       act+=upUsed?'<div>本回合已升級過</div>':ls.length?'<div>起點：可升級一塊地</div>'+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'<div>沒有可升級的土地</div>';
     }
     if(trading)act+='<div class="hint">可於下方交易股票</div>';
-    if(extraOn)act+='<button onclick="closeExtra()">結束股市交易</button>';else if(p.extra>0)act+=`<button class="big" onclick="useExtra()">使用額外股市機會（剩 ${p.extra}）</button>`;
+    if(extraOn)act+='<button onclick="closeExtra()">結束股市交易</button>';
     act+=`<button onclick="endTurn()">結束回合</button>`;
   }
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">玩家${turn+1}</b>${nameOf(turn)}　<span class="dice">🎲 ${dice||'-'}</span><br>${act}</div>`;
-  const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'')+(q.extra?` 📈額外交易×${q.extra}`:'');
+  const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
   const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><b>玩家${i+1}</b>${nameOf(i)}${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 100000，經過或停留起點即獲勝</b>':''}</div>`}).join('');
   const stk=`<div class="box"><b>股市</b>（每區每人上限 ${MAXH} 股；股價隨買賣、升級、過路費波動）<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
     RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${(tollMod[r]||1).toFixed(2)}</td>${P.map(q=>`<td>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`+

@@ -30,7 +30,6 @@ function safeAct(fn, a, ex) {
     case 'sellEnough': return reg(a[0]) && sellEnough(a[0]);
     case 'sellLand': return int(a[0]) && sellLand(a[0]);
     case 'confirmNeed': return P[need.who].cash >= need.amount && confirmNeed();
-    case 'useExtra': return useExtra();
     case 'closeExtra': return closeExtra();
     case 'cancelNeed': return !need.forced && cancelNeed();
   }
@@ -50,6 +49,7 @@ function aiStep() {
     if (ls.length) return sellLand(ls[0].id);
     return need.forced ? confirmNeed() : cancelNeed();
   }
+  if (extraOn) return aiTrade() || closeExtra();
   if (phase === 'roll') return roll();
   if (choices) return pick(pick1(choices));
   if (phase !== 'act') return;
@@ -65,15 +65,18 @@ function aiStep() {
     const free = deck.map((d, k) => (d.by < 0 ? k : -1)).filter((k) => k >= 0);
     if (free.length) return flipAt(pick1(free));
   }
-  if (t.type === 'stock' || extraOn) {
-    for (const r of RK) {
-      if (traded[r]) continue;
-      const q = Math.min(MAXH - p.st[r], Math.floor((c - 8000) * 0.3 / stock[r]));
-      if (q >= 1) { qty[r] = q; return trade(r, 1); }
-      traded[r] = true;
-    }
-    if (extraOn) return closeExtra();
-  }
-  if (p.extra > 0 && !extraOn && c >= 10000) return useExtra();
+  if (t.type === 'stock' && aiTrade()) return;
   return endTurn();
+}
+
+// 股市交易：每區最多一次，有餘裕就買；回傳 true 表示這次動作了
+function aiTrade() {
+  const p = P[turn], c = p.cash;
+  for (const r of RK) {
+    if (traded[r]) continue;
+    const q = Math.min(MAXH - p.st[r], Math.floor((c - 8000) * 0.3 / stock[r]));
+    if (q >= 1) { qty[r] = q; trade(r, 1); return true; }
+    traded[r] = true;
+  }
+  return false;
 }

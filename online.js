@@ -11,7 +11,7 @@ askPick = (k) => rpc('askPick', k); askSkip = () => rpc('askSkip');
 allocOk = () => tx({ t: 'act', fn: 'allocOk', args: [], vals: alloc.vals });
 trade = (r, s) => tx({ t: 'act', fn: 'trade', args: [r, s], q: qty[r] });
 sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnough', r); sellLand = (id) => rpc('sellLand', id);
-useExtra = () => rpc('useExtra'); closeExtra = () => rpc('closeExtra');
+closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 function applyState(s) {
