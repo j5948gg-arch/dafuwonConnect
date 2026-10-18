@@ -30,6 +30,8 @@ function safeAct(fn, a, ex) {
     case 'sellEnough': return reg(a[0]) && sellEnough(a[0]);
     case 'sellLand': return int(a[0]) && sellLand(a[0]);
     case 'confirmNeed': return P[need.who].cash >= need.amount && confirmNeed();
+    case 'useExtra': return useExtra();
+    case 'closeExtra': return closeExtra();
     case 'cancelNeed': return !need.forced && cancelNeed();
   }
 }
@@ -63,13 +65,15 @@ function aiStep() {
     const free = deck.map((d, k) => (d.by < 0 ? k : -1)).filter((k) => k >= 0);
     if (free.length) return flipAt(pick1(free));
   }
-  if (t.type === 'stock') {
+  if (t.type === 'stock' || extraOn) {
     for (const r of RK) {
       if (traded[r]) continue;
       const q = Math.min(MAXH - p.st[r], Math.floor((c - 8000) * 0.3 / stock[r]));
       if (q >= 1) { qty[r] = q; return trade(r, 1); }
       traded[r] = true;
     }
+    if (extraOn) return closeExtra();
   }
+  if (p.extra > 0 && !extraOn && c >= 10000) return useExtra();
   return endTurn();
 }

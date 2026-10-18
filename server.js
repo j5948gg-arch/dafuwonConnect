@@ -3,7 +3,7 @@ const { WebSocketServer } = require('ws');
 const rd = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const SRC = ['map.js', 'engine.js', 'ai.js'].map(rd);
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,flipUsed,justBought,lastCard,stock,turn,phase,left,dice,first,choices,busy,logs,need})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,first,choices,busy,logs,need})';
 const NONE = JSON.stringify({ t: 'none' });
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));

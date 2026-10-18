@@ -17,7 +17,7 @@
   // 地價 ≤2000、末位 0 或 50、且每格不重複；過路費 = 地價的 10%
   const L = (name, x, y, region, price) => ({ name, x, y, type: 'land', region, price, toll: Math.round(price / 10) });
   const S = (x, y) => ({ name: '股市', x, y, type: 'stock' });
-  const G = (gem, x, y, region) => ({ name: GEMS[gem].name, x, y, type: 'gem', gem, region });
+  const G = (gem, x, y, region) => ({ name: GEMS[gem].name, x, y, type: 'gem', gem, region: null }); // 所有寶石格的標籤一律顯示「特殊」
   const START = { name: '起點', x: 0, y: 0, type: 'start' };
 
   // 外圈 22 格，順時針（左上角開始）。首尾相接成環。
@@ -79,7 +79,7 @@
   const LEVELS = ['E', 'D', 'C', 'B', 'A', 'S'];
   const LEVEL_NAMES = ['平地', '小樓房', '小公寓', '大樓', '住宅區', '商業區'];
   const STOCK_REF = 225;                       // 股價基準（初始 150~300 的中間值）
-  const TOLL_MULT = [3, 9, 27, 81, 200, 400]; // 各等級 E,D,C,B,A,S 的過路費倍率。A 級(60倍)：標準股價下最便宜的地 4200、最貴的地 12000
+  const TOLL_MULT = [3, 9, 27, 81, 150, 250]; // 各等級 E,D,C,B,A,S 的過路費倍率（標準股價下，A 級：最便宜的地 10500、最貴的地 30000）
   const UP_RATE = [0.30, 0.40, 0.55, 0.75, 1.00]; // 升到下一級的費用 = 地價 × 此比率
   const r10 = (n) => Math.max(10, Math.round(n / 10) * 10);
   // 過路費 = 地價 10% × 等級倍率 × (該區股價 / 基準)
