@@ -92,7 +92,7 @@
   const BUYOUT_MULT = 5;                        // 強制併購 = 原始地價 × 5
   const BUYOUT_MAX_LV = 0;                      // 僅限等級 E(0) 的土地可被強制併購
   // 股價隨行為浮動的幅度（比例）
-  const IMPACT = { buyLand: 0.2, upgrade: 0.3, sellLand: 0.2, buyout: 0.2, toll: 0.1, perShare: 0.0005 };
+  const IMPACT = { buyLand: 0.02, upgrade: 0.1, sellLand: 0.05, buyout: 0.02, toll: 0.08, perShare: 0.0005 };
 
   const MAP = { REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT };
   if (typeof module !== 'undefined') module.exports = MAP;
