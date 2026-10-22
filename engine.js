@@ -1,4 +1,5 @@
-let NAMES=[],ME=-1;const LVC=['#8e44ad','#2e86de','#27ae60','#f1c40f','#f08a00','#e0262d']; // E→S：紫、藍、綠、黃、橙、紅
+let NAMES=[],PIC=[],ME=-1;
+const picUrl=i=>`/img/p${PIC[i]!==undefined?PIC[i]:i}.png`;const LVC=['#8e44ad','#2e86de','#27ae60','#f1c40f','#f08a00','#e0262d']; // E→S：紫、藍、綠、黃、橙、紅
 let extraOn=false,pendingTrade=false,resumeMove=false;
 const monoOwner=r=>{const ls=T.filter(t=>t.type==='land'&&t.region===r),o=owner[ls[0].id];return o!==undefined&&ls.every(t=>owner[t.id]===o)?o:-1;};
 const nameOf=i=>NAMES[i]?'｜'+NAMES[i]:'';
@@ -317,35 +318,36 @@ function arrow(from,to,active){
     <circle r="17" fill="var(--accent)" stroke="#222" stroke-width="1.5"/>
     <polygon points="-8,-9 10,0 -8,9" fill="#222" transform="rotate(${ang})"/></g>`;
 }
-const dk=(h,f=.72)=>'#'+[1,3,5].map(i=>Math.round(parseInt(h.substr(i,2),16)*f).toString(16).padStart(2,'0')).join('');
 function tileSvg(t){
   const x=cx(t)-W/2,y=cy(t)-H/2;
-  let fill='#e6e6e6',sub='',sub2='',icon='',badge='',edge='#8a8a82',tc='#222';
-  if(t.type==='land'){
-    const o=owner[t.id],ow=o!==undefined;
-    fill=ow?C[o]:'#e6e6e6';tc=ow&&o<2?'#fff':'#222';edge=dk(MAP.REGIONS[t.region].color);
-    sub=ow?RN(t.region):`${RN(t.region)}｜地價 ${money(t.price)}`;sub2=ow?money(tollOf(t)):'';
+  let fill='#e6e6e6',sub='',sub2='',icon='',badge='';
+  if(t.type==='land'){fill=MAP.REGIONS[t.region].color;const ow=owner[t.id]!==undefined;sub=ow?RN(t.region):`${RN(t.region)}｜地價 ${money(t.price)}`;sub2=ow?money(tollOf(t)):'';
     badge=(l=>`<rect x="${x+4}" y="${y+4}" width="22" height="19" rx="5" fill="${LVC[l]}" stroke="#fff" stroke-width="1.5"/><text x="${x+15}" y="${y+18}" font-size="14" font-weight="800" fill="${l===3?'#222':'#fff'}" text-anchor="middle">${MAP.LEVELS[l]}</text>`)(lv[t.id]||0);}
-  if(t.type==='gem'){fill=MAP.GEMS[t.gem].color;sub=t.region?RN(t.region):'特殊';icon='💎';tc=t.gem!=='topaz'?'#fff':'#222';}
+  if(t.type==='gem'){fill=MAP.GEMS[t.gem].color;sub=t.region?RN(t.region):'特殊';icon='💎';}
   if(t.type==='stock'){fill='#d4dae2';icon='📈';sub='可交易股票';}
   if(t.type==='start'){fill='#fff';icon='🏁';}
+  const tc=(t.type==='gem'&&t.gem!=='topaz')?'#fff':'#222';
   const here=P.map((p,i)=>p.alive&&p.pos===t.id?i:-1).filter(i=>i>=0);
-  const o=owner[t.id],flag=o===undefined?'':`<circle cx="${x+W-11}" cy="${y+11}" r="8" fill="${C[o]}" stroke="#fff" stroke-width="1.5"/><text x="${x+W-11}" y="${y+15}" font-size="10" font-weight="700" fill="${o<2?'#fff':'#222'}" text-anchor="middle">${o+1}</text>`;
+  const o=owner[t.id],flag=o===undefined?'':`<circle cx="${x+W-11}" cy="${y+11}" r="8" fill="${C[o]}" stroke="#fff" stroke-width="1.5"/><text x="${x+W-11}" y="${y+15}" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">${o+1}</text>`;
   const cur=here.includes(turn);
-  return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${fill}" stroke="${cur?(o===turn?'#222':C[turn]):edge}" stroke-width="${cur?4:3}"/>
+  return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${fill}" stroke="${cur?C[turn]:'#8a8a82'}" stroke-width="${cur?4:1.5}"/>
    <text x="${cx(t)}" y="${y+31}" font-size="${t.name.length>4?12:15}" font-weight="700" fill="${tc}" text-anchor="middle">${icon} ${t.name}</text>
    <text x="${cx(t)}" y="${y+43}" font-size="11" fill="${tc}" text-anchor="middle" opacity=".85">${sub}</text>
    <text x="${cx(t)}" y="${y+60}" font-size="17" font-weight="800" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sub2}</text>${badge}${flag}`;
 }
 
-/* ---------- 棋子（獨立圖層：保留元素才能做移動動畫；輪到的玩家稍微放大） ---------- */
-const SVGNS='http://www.w3.org/2000/svg';
+/* ---------- 棋子（獨立圖層：保留元素才能做移動動畫） ---------- */
+const SVGNS='http://www.w3.org/2000/svg',TK=40,SM=.5; // 圖片基準 40px（輪到的玩家）；其他玩家縮小為 SM 倍
 function tokTarget(){
   const out={};
   P.forEach((p,i)=>{
     if(!p.alive)return;
-    const t=T[p.pos],here=P.map((q,j)=>q.alive&&q.pos===p.pos?j:-1).filter(j=>j>=0),k=here.indexOf(i);
-    out[i]={x:cx(t)+(k-(here.length-1)/2)*24,y:cy(t)+H/2-11};
+    const t=T[p.pos],x=cx(t)-W/2,y=cy(t)-H/2,me=i===turn&&phase!=='over';
+    if(me)out[i]={x:cx(t)+27,y:y+H-TK/2-1,me};                       // 輪到的玩家：放大，在格子右下
+    else{
+      const k=P.filter((q,j)=>q.alive&&q.pos===p.pos&&j<i&&!(j===turn&&phase!=='over')).length;
+      out[i]={x:x+4+TK*SM/2+k*16,y:y+H-4-TK*SM/2,me};                // 其他玩家：縮小，由左下角往右排
+    }
   });
   return out;
 }
@@ -358,15 +360,17 @@ function updateTokens(){
     const tf=`translate(${a.x}px,${a.y}px)`;
     if(!el){
       el=document.createElementNS(SVGNS,'g');el.setAttribute('class','tok');el.setAttribute('data-i',i);
-      el.style.transform=tf;el.dataset_x=a.x;el.dataset_y=a.y;
-      el.innerHTML=`<g class="tk"><circle r="9" fill="${C[i]}" stroke="#fff" stroke-width="2"/><text y="4" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">${+i+1}</text></g>`;
+      el.style.transform=tf;el._x=a.x;el._y=a.y;
+      el.innerHTML=`<g class="tk${a.me?' me':''}"><ellipse cx="0" cy="${TK*.42}" rx="${TK*.38}" ry="${TK*.12}" fill="${C[i]}" stroke="#fff" stroke-width="1.5"/><image href="${picUrl(i)}" x="${-TK/2}" y="${-TK/2}" width="${TK}" height="${TK}"/></g>`;
       g.appendChild(el);
-    }else if(el.dataset_x!==a.x||el.dataset_y!==a.y){
-      const d=Math.hypot(a.x-el.dataset_x,a.y-el.dataset_y);
-      el.style.transitionDuration=(d>SX*1.6?.55:.24)+'s'; // 單步移動 0.24 秒；傳送/長距離 0.55 秒
-      el.style.transform=tf;el.dataset_x=a.x;el.dataset_y=a.y;
+    }else{
+      if(el._x!==a.x||el._y!==a.y){
+        const d=Math.hypot(a.x-el._x,a.y-el._y);
+        el.style.transitionDuration=(d>SX*1.6?.55:.24)+'s'; // 單步移動 0.24 秒；傳送/長距離 0.55 秒
+        el.style.transform=tf;el._x=a.x;el._y=a.y;
+      }
+      el.firstChild.classList.toggle('me',!!a.me);
     }
-    el.firstChild.classList.toggle('me',+i===turn&&phase!=='over');
   });
 }
 function clearTokens(){const g=$('#gk');if(g)g.innerHTML='';}
@@ -423,7 +427,7 @@ function render(){
   }
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">玩家${turn+1}</b>${nameOf(turn)}　<span class="dice">🎲 ${dice||'-'}</span><br>${act}</div>`;
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
-  const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><b>玩家${i+1}</b>${nameOf(i)}${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}</div>`}).join('');
+  const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><img class="pp" src="${picUrl(i)}" alt="${MAP.PIC_NAMES[PIC[i]]||''}"><b>玩家${i+1}</b>${nameOf(i)}${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}</div>`}).join('');
   const stk=`<div class="box"><b>股市</b>（每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股；股價隨買賣、升級、過路費波動）<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
     RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${(tollMod[r]||1).toFixed(2)}</td>${P.map((q,i)=>`<td${trading&&i===turn?' style="background:var(--accent);color:#222;font-weight:700"':''}>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`+
     (trading?'<hr>'+RK.map(r=>traded[r]?`<div>${RN(r)} 🔒 本次已交易，暫時關閉</div>`:`<div>${RN(r)} <span style="background:var(--accent);color:#222;font-weight:700;padding:1px 7px;border-radius:10px">持有 ${P[turn].st[r]}</span> <input type="number" min="1" max="99" value="${qty[r]}" oninput="setQty('${r}',this.value)">

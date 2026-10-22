@@ -28,7 +28,7 @@ function connect() {
     if (m.t === 'none') { ROOM = null; STARTED = false; DRAW = null; return view(); }
     DRAW = m.draw || null;
     ROOM = m.code; SEATS = m.seats; HOST = m.host; ME = m.you; STARTED = m.started;
-    NAMES = m.seats.map((s) => s.name);
+    NAMES = m.seats.map((s) => s.name); PIC = m.seats.map((s) => s.pic);
     if (m.s) applyState(m.s);
     view();
   };
@@ -41,14 +41,18 @@ function lobbyHtml() {
   }
   const rows = [0, 1, 2, 3].map((i) => {
     const s = SEATS[i];
-    return `<div class="seat">${i + 1}. ${s ? `${i === HOST ? '👑 ' : ''}<b>${s.name}</b>${s.ai && !/^AI/.test(s.name) ? '（AI）' : ''}${i === ME ? '（你）' : ''}${s.online ? '' : '（離線）'}` : '<span style="opacity:.5">空位</span>'}</div>`;
+    return `<div class="seat">${s ? `<img src="/img/p${s.pic}.png" alt="">` : ''}<span>${i + 1}. ${s ? `${i === HOST ? '👑 ' : ''}<b>${s.name}</b>${s.ai && !/^AI/.test(s.name) ? '（AI）' : ''}${i === ME ? '（你）' : ''}${s.online ? '' : '（離線）'}` : '<span style="opacity:.5">空位</span>'}</span></div>`;
   }).join('');
+  const picker = `<div class="box"><b>選擇你的棋子</b>（不可與其他玩家重複）<div class="pk">${MAP.PIC_NAMES.map((n, k) => {
+    const by = SEATS.findIndex((s) => s.pic === k), mine = by === ME, taken = by >= 0 && !mine;
+    return `<button class="pkb${mine ? ' sel' : ''}" ${taken ? 'disabled' : ''} title="${n}${taken ? '（' + SEATS[by].name + ' 使用中）' : ''}" onclick="tx({t:'pic',i:${k}})"><img src="/img/p${k}.png" alt="${n}"></button>`;
+  }).join('')}</div></div>`;
   const full = SEATS.length === 4, isHost = ME === HOST;
   const ctl = isHost
     ? `<button onclick="tx({t:'ai'})" ${full ? 'disabled' : ''}>加入 1 個 AI</button><button onclick="tx({t:'fillai'})" ${full ? 'disabled' : ''}>補滿 AI</button><button onclick="tx({t:'rmai'})">移除 AI</button><br>
        <button class="big" onclick="tx({t:'start'})" ${full ? '' : 'disabled'}>開始遊戲</button>${full ? '' : '<div style="font-size:12px">需滿 4 人才能開始，不足的位置可用 AI 補滿</div>'}`
     : '<div class="hint">等待房主開始遊戲…</div>';
-  return `<div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button>`;
+  return `<div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button>`;
 }
 function mk(t) {
   const name = $('#nm').value.trim(); if (!name) return alert('請輸入 ID');

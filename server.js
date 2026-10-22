@@ -2,6 +2,9 @@ const http = require('http'), fs = require('fs'), path = require('path'), vm = r
 const { WebSocketServer } = require('ws');
 const rd = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const SRC = ['map.js', 'engine.js', 'ai.js'].map(rd);
+const PIC_COUNT = 10;
+const IMG = {};
+const img = (n) => IMG[n] || (IMG[n] = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')));
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
 const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,first,choices,busy,logs,need})';
 const NONE = JSON.stringify({ t: 'none' });
@@ -21,7 +24,7 @@ const ev = (r, code) => vm.runInContext(code, r.ctx);
 
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
-  const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, online: s.ai || !!s.ws }));
+  const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, pic: s.pic, online: s.ai || !!s.ws }));
   r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
 }
 function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
@@ -57,9 +60,14 @@ function sync(r, force) {
   r.snap = s;
   broadcast(r);
 }
+// 棋子圖片：座位之間不可重複，新座位隨機分配一個沒人用的
+function freePic(r) {
+  const free = [...Array(PIC_COUNT).keys()].filter((k) => !r.seats.some((s) => s.pic === k));
+  return free[Math.random() * free.length | 0];
+}
 function addAI(r) {
   let k = 1; while (r.seats.some((s) => s.name === 'AI-' + k)) k++;
-  r.seats.push({ name: 'AI-' + k, ai: true, token: null, ws: null, off: 0 });
+  r.seats.push({ name: 'AI-' + k, ai: true, token: null, ws: null, off: 0, pic: freePic(r) });
 }
 function drop(ws) {
   const r = ws.room, s = ws.me; if (!r) return;
@@ -109,7 +117,7 @@ function handle(ws, m) {
       if (r.seats.length >= 4) return err('房間已滿');
       if (r.seats.some((s) => s.name === name)) return err('這個 ID 已有人使用，請換一個');
     }
-    const s = { name, ai: false, token: tok, ws, off: 0 };
+    const s = { name, ai: false, token: tok, ws, off: 0, pic: freePic(r) };
     if (m.t === 'create') r.host = s;
     r.seats.push(s); byToken[tok] = r.code; ws.room = r; ws.me = s;
     return broadcast(r);
@@ -119,6 +127,13 @@ function handle(ws, m) {
   switch (m.t) {
     case 'ai': if (host && !r.started && r.seats.length < 4) addAI(r); break;
     case 'fillai': if (host && !r.started) while (r.seats.length < 4) addAI(r); break;
+    case 'pic': {
+      const k = m.i;
+      if (r.started) return;
+      if (!Number.isInteger(k) || k < 0 || k >= PIC_COUNT) return;
+      if (r.seats.some((x) => x !== me && x.pic === k)) return err('這個棋子已被其他玩家選走了');
+      me.pic = k; break;
+    }
     case 'rmai': if (host && !r.started) { for (let i = r.seats.length - 1; i >= 0; i--) if (r.seats[i].ai) { r.seats.splice(i, 1); break; } } break;
     case 'start':
       if (!host || r.started) return;
@@ -155,7 +170,9 @@ function handle(ws, m) {
 }
 
 const srv = http.createServer((q, s) => {
-  const p = PAGES[q.url.split('?')[0]];
+  const url = q.url.split('?')[0], im = url.match(/^\/img\/p(\d)\.png$/);
+  if (im && +im[1] < PIC_COUNT) { s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' }); return s.end(img(+im[1])); }
+  const p = PAGES[url];
   if (!p) { s.writeHead(404); return s.end('not found'); }
   s.writeHead(200, { 'Content-Type': p[1] + ';charset=utf-8' }); s.end(rd(p[0]));
 });
