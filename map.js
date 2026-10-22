@@ -90,7 +90,7 @@
   const gemBonus = (level) => 3000 * level;     // 集滿四寶石經過起點的獎金（玩家等級從 1 開始）
   const WIN_ASSETS = 200000;
   const BUYOUT_MULT = 5;                        // 強制併購 = 原始地價 × 5
-  const PIC_NAMES = ['騎士', '紫髮劍士', '魔女', '細劍少女', '雞蛇獸', '老鼠', '史萊姆', '魅魔', '吸血鬼', '風精靈']; // 對應 img/p0.png ~ p9.png
+  const PIC_NAMES = ['翼龍', '血眼怪', '食人花', '鯊魚人', '雞蛇獸', '老鼠', '史萊姆', '紫蛇', '白狼', '風精靈', '法老守衛', '火焰精靈']; // 對應 img/p0.png ~ p11.png
   const BUYOUT_MAX_LV = 0;                      // 僅限等級 E(0) 的土地可被強制併購
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.05, buyout: 0.02, toll: 0.02, perShare: 0.0005 };

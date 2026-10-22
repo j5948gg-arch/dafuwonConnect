@@ -2,7 +2,7 @@ const http = require('http'), fs = require('fs'), path = require('path'), vm = r
 const { WebSocketServer } = require('ws');
 const rd = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const SRC = ['map.js', 'engine.js', 'ai.js'].map(rd);
-const PIC_COUNT = 10;
+const PIC_COUNT = 12;
 const IMG = {};
 const img = (n) => IMG[n] || (IMG[n] = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')));
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
@@ -170,7 +170,7 @@ function handle(ws, m) {
 }
 
 const srv = http.createServer((q, s) => {
-  const url = q.url.split('?')[0], im = url.match(/^\/img\/p(\d)\.png$/);
+  const url = q.url.split('?')[0], im = url.match(/^\/img\/p(\d{1,2})\.png$/);
   if (im && +im[1] < PIC_COUNT) { s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' }); return s.end(img(+im[1])); }
   const p = PAGES[url];
   if (!p) { s.writeHead(404); return s.end('not found'); }
