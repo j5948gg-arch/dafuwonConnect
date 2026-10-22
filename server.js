@@ -22,7 +22,31 @@ const ev = (r, code) => vm.runInContext(code, r.ctx);
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
   const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, online: s.ai || !!s.ws }));
-  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap }));
+  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
+}
+function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
+
+// 平局投票：只有真人（非 AI）可投票，同意數 ≥ 真人數的一半（過半數，含剛好一半）即成立
+const humans = (r) => r.seats.filter((s) => !s.ai);
+const drawNeed = (r) => Math.ceil(humans(r).length / 2);
+function drawInfo(r, me) {
+  const d = r.draw; if (!d) return null;
+  const idx = (tokens) => tokens.map((t) => r.seats.findIndex((x) => x.token === t)).filter((i) => i >= 0);
+  return { by: d.byName, yes: idx(d.yes), no: idx(d.no), need: drawNeed(r), humans: humans(r).length,
+    mine: !me.ai && d.yes.includes(me.token) ? 'yes' : d.no.includes(me.token) ? 'no' : null, left: Math.max(0, Math.ceil((d.exp - Date.now()) / 1000)) };
+}
+// 回到組隊房間（保留座位；玩家已離開而由 AI 接管的座位仍是 AI）
+function toLobby(r, msg) {
+  r.started = false; r.ctx = null; r.snap = null; r.raw = ''; r.draw = null;
+  broadcast(r); notice(r, msg);
+}
+function tallyDraw(r) {
+  const d = r.draw; if (!d || !r.started) return;
+  const toks = humans(r).map((s) => s.token);
+  d.yes = d.yes.filter((t) => toks.includes(t)); d.no = d.no.filter((t) => toks.includes(t));
+  const need = drawNeed(r);
+  if (d.yes.length >= need) return toLobby(r, '平局投票通過，本局以平局結束，回到組隊房間');
+  if (toks.length - d.no.length < need) { r.draw = null; r.drawCool = Date.now() + 20000; notice(r, '平局投票未通過'); }
 }
 function sync(r, force) {
   const raw = ev(r, SNAP);
@@ -50,7 +74,13 @@ function leave(ws) {
     for (const x of r.seats) if (x.ws) { x.ws.room = x.ws.me = null; send(x.ws, NONE); }
     r.seats.forEach((x) => delete byToken[x.token]); delete rooms[r.code]; return;
   }
-  delete byToken[s.token]; drop(ws); send(ws, NONE);
+  if (!r.started) { delete byToken[s.token]; drop(ws); send(ws, NONE); return; }
+  // 遊戲進行中離開：座位由 AI 接管，無法重新連線
+  delete byToken[s.token]; ws.room = ws.me = null; send(ws, NONE);
+  s.ai = true; s.token = null; s.ws = null; s.off = 0; s.name = 'AI(' + s.name + ')';
+  if (!humans(r).length) { r.seats.forEach((x) => delete byToken[x.token]); delete rooms[r.code]; return; }
+  if (r.host === s) r.host = humans(r)[0];
+  tallyDraw(r); if (rooms[r.code] === r) broadcast(r);
 }
 
 function handle(ws, m) {
@@ -98,7 +128,21 @@ function handle(ws, m) {
       r.started = true; r.lastAI = Date.now();
       return sync(r, true);
     case 'rematch':
-      if (host && r.started && ev(r, 'phase') === 'over') { r.started = false; r.ctx = null; r.snap = null; r.raw = ''; }
+      if (host && r.started && ev(r, 'phase') === 'over') { r.started = false; r.ctx = null; r.snap = null; r.raw = ''; r.draw = null; }
+      break;
+    case 'forceclose':
+      if (!host || !r.started) return;
+      return toLobby(r, '房主已強制關閉遊戲，回到組隊房間');
+    case 'drawstart':
+      if (!r.started || ev(r, 'phase') === 'over' || r.draw) return;
+      if (r.drawCool && Date.now() < r.drawCool) return err('平局投票剛被否決，請稍後再發起');
+      r.draw = { byName: me.name, yes: [me.token], no: [], exp: Date.now() + 60000 };
+      tallyDraw(r); if (r.draw) notice(r, me.name + ' 發起了平局投票');
+      break;
+    case 'drawvote':
+      if (!r.started || !r.draw || r.draw.yes.includes(me.token) || r.draw.no.includes(me.token)) return;
+      (m.yes ? r.draw.yes : r.draw.no).push(me.token);
+      tallyDraw(r);
       break;
     case 'leave': return leave(ws);
     case 'act':
@@ -130,6 +174,7 @@ setInterval(() => {
     r.empty = online ? 0 : r.empty || now;
     if (r.empty && now - r.empty > 3600000) { r.seats.forEach((s) => delete byToken[s.token]); delete rooms[r.code]; continue; }
     if (!r.started) continue;
+    if (r.draw && now > r.draw.exp) { r.draw = null; notice(r, '平局投票逾時，已取消'); broadcast(r); }
     try {
       if (now - r.lastAI > 800) {
         r.lastAI = now;

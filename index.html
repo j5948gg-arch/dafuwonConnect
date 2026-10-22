@@ -35,13 +35,24 @@ input[type=number]{width:56px;font:inherit;padding:4px;border-radius:6px;border:
 .pulse{animation:p 1s infinite}@keyframes p{50%{opacity:.55}}
 
 .wait [onclick],.wait input,.wait select{pointer-events:none}
+/* 右上角按鈕、棋子動畫、提示 */
+.topbar{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px}
+.topbar #st{flex:1 1 220px;margin:0}
+#tb{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+#tb button{margin:0;padding:5px 10px;font-size:13px}
+button.danger{border-color:#d33;color:#d33;font-weight:700}
+.tok{transition:transform .24s linear;pointer-events:none}
+.tk{transition:transform .2s ease-out}.tk.me{transform:scale(1.35)}
+@media (prefers-reduced-motion:reduce){.tok,.tk{transition:none}}
+#toast{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:#222;color:#fff;padding:8px 14px;border-radius:8px;z-index:9;font-size:14px;max-width:90vw;text-align:center}
 #lobby{max-width:460px}.seat{padding:6px 10px;margin:4px 0;border:1px solid var(--bd);border-radius:8px;background:var(--panel)}
 .code{font-size:34px;font-weight:700;letter-spacing:6px}
 input[type=text]{font:inherit;padding:6px;border-radius:6px;border:1px solid var(--bd);background:var(--panel);color:var(--fg)}
 </style></head><body>
 <h1>世界大富翁（連線版）</h1>
 <div id="lobby"></div>
-<div id="game" style="display:none"><div id="st" class="box"></div><div id="md"></div>
+<div id="game" style="display:none"><div class="topbar"><div id="st" class="box"></div><div id="tb"></div></div><div id="md"></div>
 <div class="wrap"><div class="board" id="bd"></div><div class="side" id="sd"></div></div></div>
+<div id="vt"></div>
 <script src="/map.js"></script><script src="/engine.js"></script><script src="/online.js"></script>
 </body></html>
