@@ -91,11 +91,14 @@
   const WIN_ASSETS = 200000;
   const BUYOUT_MULT = 5;                        // 強制併購 = 原始地價 × 5
   const PIC_NAMES = ['翼龍', '血眼怪', '食人花', '鯊魚人', '雞蛇獸', '老鼠', '史萊姆', '紫蛇', '白狼', '風精靈', '法老守衛', '火焰精靈']; // 對應 img/p0.png ~ p11.png
+  const PALETTE = [{ n: '紅', c: '#e74c3c' }, { n: '藍', c: '#3498db' }, { n: '綠', c: '#2ecc71' }, { n: '黃', c: '#e6a800' },
+    { n: '紫', c: '#8e44ad' }, { n: '粉', c: '#ff7eb6' }, { n: '橘', c: '#f26d1b' }, { n: '棕', c: '#8d5524' }]; // 玩家代表色（房間內不可重複）
+  const PIC_VER = 3;                            // 換圖時把這個數字加 1，瀏覽器就會重新下載
   const BUYOUT_MAX_LV = 0;                      // 僅限等級 E(0) 的土地可被強制併購
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.05, buyout: 0.02, toll: 0.02, perShare: 0.0005 };
 
-  const MAP = { REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES };
+  const MAP = { REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
   if (typeof module !== 'undefined') module.exports = MAP;
   else window.MAP = MAP;
 })();
