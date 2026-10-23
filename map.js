@@ -37,7 +37,7 @@
   const CENTER = [
     L('南非', -2, 0, 'africa', 1250), L('奈及利亞', -1, 0, 'africa', 1400),
     START,
-    L('埃及', 1, 0, 'africa', 1800), L('肯亞', 2, 0, 'africa', 14500),
+    L('埃及', 1, 0, 'africa', 1800), L('肯亞', 2, 0, 'africa', 1450),
   ];
 
   const TILES = [START, ...RING, ...CENTER.filter((t) => t !== START)].map((t, id) => ({ id, ...t }));
