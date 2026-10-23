@@ -8,7 +8,7 @@ const pn=i=>NAMES[i]?esc(NAMES[i]):'玩家'+(i+1);          // 玩家 ID（沒�
 const pnA=i=>pn(i)+(AWAY[i]?'（AI代打）':'');
 
 let C=MAP.PALETTE.map(p=>p.c);   // 各玩家代表色（連線時由房間內的選色覆蓋）
-const ink=h=>{const n=parseInt(h.slice(1),16);return ((n>>16)*299+(n>>8&255)*587+(n&255)*114)/1000>150?'#222':'#fff';}; // 依底色自動選黑/白字
+const ink=()=>'#fff'; // 代表色色塊上的文字一律白色
 const SX=108,SY=94,W=100,H=80,PAD=10,VW=PAD*2+W+6*SX,VH=PAD*2+H+6*SY;
 const cx=t=>PAD+W/2+(t.x+3)*SX, cy=t=>PAD+H/2+(3-t.y)*SY;
 const T=MAP.TILES, RK=Object.keys(MAP.REGIONS), RN=r=>MAP.REGIONS[r].name, IM=MAP.IMPACT, $=s=>document.querySelector(s);
@@ -356,9 +356,10 @@ function rollFx(){
 /* ---------- 小地圖（只標示玩家位置，不含文字） ---------- */
 function miniSvg(){
   const tiles=T.map(t=>{
-    const x=cx(t)-W/2,y=cy(t)-H/2;
-    const f=t.type==='land'?MAP.REGIONS[t.region].color:t.type==='gem'?MAP.GEMS[t.gem].color:t.type==='stock'?'#d4dae2':'#fff';
-    return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${f}" opacity=".6"/>`;
+    const x=cx(t)-W/2,y=cy(t)-H/2,X=cx(t),Y=cy(t);
+    if(t.type==='gem')return `<polygon points="${X},${Y-42} ${X+46},${Y} ${X},${Y+42} ${X-46},${Y}" fill="${MAP.GEMS[t.gem].color}" stroke="#222" stroke-width="6" stroke-linejoin="round"/>`;
+    const f=t.type==='land'?(owner[t.id]!==undefined?C[owner[t.id]]:'#c9c9c4'):t.type==='stock'?'#d4dae2':'#fff';
+    return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${f}" ${t.type==='land'?'':'stroke="#aaa" stroke-width="3"'}/>`;
   }).join('');
   const off=[[-20,-15],[20,-15],[-20,15],[20,15]];
   const dots=P.map((p,i)=>{
