@@ -259,9 +259,12 @@ function flipAt(s){
   cd.fn(i);
   render();
 }
+let CARD_OPEN=false;   // 翻牌區平常收起；玩家自己按「查看翻牌區」才展開（只影響自己的畫面）
+const toggleCards=()=>{CARD_OPEN=!CARD_OPEN;render();};
 function cardBox(){
   const p=P[turn],can=phase==='act'&&!need&&!ask&&!alloc&&!flipUsed&&T[p.pos].type==='gem';
-  return `<div class="box" style="margin-top:8px"><b>翻牌區</b>（${can?'<span class="hint">請點選一個數字翻牌</span>':'停在寶石格可自選一張牌翻開；橫向連線每張 +100'}）<div class="cg">`+
+  if(!can&&!CARD_OPEN)return `<div style="margin-top:8px"><button onclick="toggleCards()">查看翻牌區</button></div>`; // 只有需要翻牌時才自動顯示
+  return `<div class="box" style="margin-top:8px"><b>翻牌區</b>${can?'':' <button onclick="toggleCards()" style="margin:0 0 0 6px;padding:2px 10px">收起</button>'}（${can?'<span class="hint">請點選一個數字翻牌</span>':'停在寶石格可自選一張牌翻開；橫向連線每張 +100'}）<div class="cg">`+
     deck.map((d,k)=>d.by<0?`<div class="cd${can?' can':''}" ${can?`onclick="flipAt(${k})"`:''}>${k+1}</div>`:`<div class="cd on" style="background:${C[d.by]};color:${ink(C[d.by])}" title="${CARDS[d.c].name}">${k+1}<small>P${d.by+1}</small></div>`).join('')+
     `</div>${lastCard?`<div style="margin-top:4px">${lastCard}</div>`:''}</div>`;
 }
