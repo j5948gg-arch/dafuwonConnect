@@ -6,7 +6,7 @@ const PIC_COUNT = 12, COLOR_COUNT = 8;
 // 圖片每次都從磁碟讀取（換圖後不必重啟伺服器），並用 ETag 讓瀏覽器每次先確認有沒有更新
 const img = (n) => { const b = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')); return { b, tag: '"' + require('crypto').createHash('md5').update(b).digest('hex') + '"' }; };
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist})';
 const NONE = JSON.stringify({ t: 'none' });
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));
@@ -176,8 +176,8 @@ function handle(ws, m) {
       break;
     case 'leave': return leave(ws);
     case 'act':
-      if (!r.started || me.away || r.seats[+ev(r, 'turn')] !== me || typeof m.fn !== 'string') return;
-      r.ctx.__j = JSON.stringify([m.fn, m.args, { vals: m.vals, q: m.q }]);
+      if (!r.started || me.away || typeof m.fn !== 'string') return;
+      r.ctx.__j = JSON.stringify([m.fn, m.args, { vals: m.vals, q: m.q, who: r.seats.indexOf(me) }]); // 誰能操作由 safeAct 依座位判斷
       try { ev(r, 'safeAct(...JSON.parse(__j))'); } catch (e) { console.error(e); }
       return sync(r);
   }
@@ -214,6 +214,8 @@ setInterval(() => {
     try {
       if (now - r.lastAI > 800) {
         r.lastAI = now;
+        const os = r.seats[+ev(r, 'offer?offer.to:-1')];   // 被提出交易的是 AI／暫離／離線的玩家：由 AI 代為回應
+        if (os && (os.ai || os.away || (!os.ws && now - os.off > 20000))) ev(r, 'aiRespond()');
         const s = r.seats[+ev(r, 'turn')];
         if (s && (s.ai || s.away || (!s.ws && now - s.off > 20000))) ev(r, 'aiStep()'); // AI 座位、暫時離開、或離線超過 20 秒：由 AI 代打
       }

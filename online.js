@@ -10,12 +10,14 @@ upgradeAt = (id) => rpc('upgradeAt', id); endTurn = () => rpc('endTurn'); flipAt
 askPick = (k) => rpc('askPick', k); askSkip = () => rpc('askSkip');
 allocOk = () => tx({ t: 'act', fn: 'allocOk', args: [], vals: alloc.vals });
 trade = (r, s) => tx({ t: 'act', fn: 'trade', args: [r, s], q: qty[r] });
+offerMake = (to, want, give, cash) => rpc('offerMake', to, want, give, cash); offerAccept = () => rpc('offerAccept');
+offerDecline = () => rpc('offerDecline'); offerCancel = () => rpc('offerCancel');
 sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnough', r); sellLand = (id) => rpc('sellLand', id);
 closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist } = s);
 }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
@@ -92,7 +94,9 @@ function view() {
   if (!inGame) { clearTokens(); $('#vt').innerHTML = ''; $('#lobby').innerHTML = lobbyHtml(); return; }
   $('#tb').innerHTML = topButtons(); $('#vt').innerHTML = voteHtml();
   const mine = turn === ME && !away();
-  document.querySelectorAll('.wrap,#md').forEach((e) => e.classList.toggle('wait', !mine));
+  const inOffer = offer && (ME === offer.to || ME === offer.from) && !away();   // 交易進行中：只有交易雙方能在彈窗上操作
+  document.querySelectorAll('.wrap').forEach((e) => e.classList.toggle('wait', offer ? true : !mine));
+  document.querySelectorAll('#md').forEach((e) => e.classList.toggle('wait', offer ? !inOffer : !mine));
   $('#st').innerHTML = `房號 ${ROOM}｜你是 <b style="color:${C[ME]}">${pn(ME)}</b>｜` +
     (phase === 'over' ? '遊戲結束 ' + (ME === HOST ? '<button onclick="tx({t:\'rematch\'})">回到大廳再來一局</button>' : '')
       : away() ? '<b class="hint">你已暫時離開，AI 正在代打。準備好了就按右邊的「關閉 AI，接手操作」</b>'

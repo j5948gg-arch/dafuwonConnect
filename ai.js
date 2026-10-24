@@ -1,13 +1,17 @@
 // 伺服器專用，不會傳給瀏覽器。與 engine.js 在同一個環境內執行。
-const MODAL_FN = { ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
+const MODAL_FN = { offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
 const ALL_MODAL_FN = [].concat(...Object.values(MODAL_FN));
 
 // 玩家送來的動作先在這裡驗證，再呼叫引擎函式
 function safeAct(fn, a, ex) {
   if (phase === 'over' || !Array.isArray(a)) return;
   const int = (v) => Number.isInteger(v), reg = (r) => RK.includes(r);
-  const m = ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
+  const m = offer ? 'offer' : ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
   if (m ? !MODAL_FN[m].includes(fn) : ALL_MODAL_FN.includes(fn)) return;
+  const who = ex && ex.who;   // 由伺服器填入的座位編號（不是玩家自己送的）
+  if (fn === 'offerAccept' || fn === 'offerDecline') { if (!offer || who !== offer.to) return; }
+  else if (fn === 'offerCancel') { if (!offer || who !== offer.from) return; }
+  else if (who !== turn) return;
   switch (fn) {
     case 'roll': return roll();
     case 'pick': return int(a[0]) && pick(a[0]);
@@ -31,6 +35,10 @@ function safeAct(fn, a, ex) {
     case 'sellLand': return int(a[0]) && sellLand(a[0]);
     case 'confirmNeed': return P[need.who].cash >= need.amount && confirmNeed();
     case 'closeExtra': return closeExtra();
+    case 'offerMake': return a.length === 4 && a.every(int) && offerMake(a[0], a[1], a[2], a[3]);
+    case 'offerAccept': return offerAccept();
+    case 'offerDecline': return offerDecline();
+    case 'offerCancel': return offerCancel();
     case 'cancelNeed': return !need.forced && cancelNeed();
   }
 }
@@ -38,6 +46,7 @@ function safeAct(fn, a, ex) {
 // AI（也用來代打離線太久的玩家）：每次呼叫只做一個動作
 function aiStep() {
   if (phase === 'over' || busy) return;
+  if (offer) return offer.from === turn ? offerCancel() : undefined; // 代打中的玩家有交易還沒結案：取消
   const i = turn, p = P[i], t = T[p.pos], pick1 = (a) => a[Math.random() * a.length | 0];
   if (alloc) return allocOk();
   if (ask) return askPick(Math.random() * ask.opts.length | 0);
@@ -79,4 +88,14 @@ function aiTrade() {
     traded[r] = true;
   }
   return false;
+}
+
+// 被提出交易的是 AI（或暫離的玩家）時，由伺服器呼叫：對方出價夠高才接受
+function aiRespond() {
+  if (!offer) return;
+  const o = offer, w = T[o.want], g = o.give >= 0 ? T[o.give] : null;
+  let get = o.cash + (g ? landVal(g) : 0), lose = landVal(w);
+  if (g && T.every((t) => t.type !== 'land' || t.region !== g.region || t.id === g.id || owner[t.id] === o.to)) get *= 1.5; // 補齊整區獨佔
+  if (monoOwner(w.region) === o.to) lose *= 2;                                                                          // 會拆掉自己的整區獨佔
+  return get >= lose * 1.15 ? offerAccept() : offerDecline();
 }
