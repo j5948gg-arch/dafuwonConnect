@@ -70,9 +70,10 @@ function freeColor(r) {
   for (let k = 0; k < COLOR_COUNT; k++) if (!r.seats.some((s) => s.color === k)) return k;
   return 0;
 }
-function addAI(r) {
-  let k = 1; while (r.seats.some((s) => s.name === 'AI-' + k)) k++;
-  r.seats.push({ name: 'AI-' + k, ai: true, token: null, ws: null, off: 0, pic: freePic(r), color: freeColor(r) });
+function addAI(r, pro) {
+  const base = pro ? '高階AI-' : 'AI-';
+  let k = 1; while (r.seats.some((s) => s.name === base + k)) k++;
+  r.seats.push({ name: base + k, ai: true, pro: !!pro, token: null, ws: null, off: 0, pic: freePic(r), color: freeColor(r) });
 }
 function drop(ws) {
   const r = ws.room, s = ws.me; if (!r) return;
@@ -129,6 +130,7 @@ function handle(ws, m) {
   const host = me === r.host;
   switch (m.t) {
     case 'ai': if (host && !r.started && r.seats.length < 4) addAI(r); break;
+    case 'aipro': if (host && !r.started && r.seats.length < 4) addAI(r, true); break;
     case 'fillai': if (host && !r.started) while (r.seats.length < 4) addAI(r); break;
     case 'pic': {
       const k = m.i;
@@ -154,7 +156,7 @@ function handle(ws, m) {
       if (!host || r.started) return;
       if (r.seats.length < 4) return err('需要滿 4 人才能開始（可用 AI 補滿）');
       r.seats.sort(() => Math.random() - 0.5); // 隨機決定順序
-      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); ev(r, 'NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
+      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); ev(r, 'PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
       r.started = true; r.lastAI = Date.now();
       return sync(r, true);
     case 'rematch':

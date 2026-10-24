@@ -60,7 +60,7 @@ function aiStep() {
   }
   if (extraOn) return aiTrade() || closeExtra();
   if (phase === 'roll') return roll();
-  if (choices) return pick(pick1(choices));
+  if (choices) return pick(PRO[i] ? proChoose(i) : pick1(choices));
   if (phase !== 'act') return;
   const c = p.cash, own = t.type === 'land' ? owner[t.id] : undefined;
   if (t.type === 'land' && own === undefined && c >= t.price + 3000) return buyLand();
@@ -98,4 +98,57 @@ function aiRespond() {
   if (g && T.every((t) => t.type !== 'land' || t.region !== g.region || t.id === g.id || owner[t.id] === o.to)) get *= 1.5; // 補齊整區獨佔（股價、過路費 +20%、四塊地升級）
   if (monoOwner(w.region) === o.to) lose *= 2;                                                                          // 會拆掉自己的整區獨佔
   return get >= lose * 1.15 ? offerAccept() : offerDecline();
+}
+
+// ---------- 高階 AI：悄悄影響骰子點數（伺服器專用，不會出現在任何畫面或紀錄） ----------
+let PRO = [];            // 哪些座位是高階 AI（開局時由伺服器填入）
+let PRO_CTRL = 0.5, PRO_K = 12000;    // PRO_CTRL：約一半的擲骰會被修正，其餘仍是純隨機；PRO_K 越大，閃避貴地的力道越弱（實測：1 個高階 AI 對 3 個一般 AI 約 77% 勝率）
+function proPaths(pos, prev, first, steps) {
+  if (steps === 0) return [[]];
+  const out = [];
+  for (const to of MAP.options(pos, prev, first)) for (const rest of proPaths(to, pos, false, steps - 1)) out.push([to, ...rest]);
+  return out;
+}
+// 這條路徑對玩家 i 的「好壞」：越高越想走。貴的對手地盤被壓低但不為零，所以仍有機率踩到。
+function proWeight(i, path) {
+  const p = P[i], gems = { ...p.gems };
+  let gain = 0, cost = 0;
+  path.forEach((id, k) => {
+    const t = T[id];
+    if (t.type === 'gem' && !gems[t.gem]) { gems[t.gem] = 1; gain += 3000; }
+    if (t.type === 'start') {
+      if (assets(i) >= MAP.WIN_ASSETS) gain += 1e6;                                  // 經過或停在起點就能獲勝
+      if (MAP.GEM_KEYS.every((g) => gems[g])) gain += 8000;
+    }
+    if (k !== path.length - 1) return;
+    if (t.type === 'start') gain += 1500;
+    else if (t.type === 'stock') gain += p.cash > 15000 ? 1200 : 400;
+    else if (t.type === 'gem') gain += 600;
+    else if (t.type === 'land') {
+      const o = owner[t.id];
+      if (o === undefined) gain += p.cash >= t.price + 3000 ? 0.8 * t.price : 0;
+      else if (o === i) gain += (lv[t.id] || 0) < 5 && p.cash >= upOf(t) + 5000 ? 3000 : 800;
+      else if (!(p.shield > 0)) cost += tollOf(t);
+    }
+  });
+  return (1 + gain / 4000) / (1 + cost / PRO_K);
+}
+function diceHook() {
+  if (!PRO[turn] || Math.random() > PRO_CTRL) return 0;
+  const p = P[turn];
+  const w = [1, 2, 3, 4, 5, 6].map((d) => Math.max(...proPaths(p.pos, p.prev, true, d).map((pa) => proWeight(turn, pa))));
+  let r = Math.random() * w.reduce((x, y) => x + y, 0);
+  for (let d = 0; d < 6; d++) { r -= w[d]; if (r <= 0) return d + 1; }
+  return 6;
+}
+// 遇到岔路時，高階 AI 選剩餘步數走完後比較好的方向（85%），否則隨機
+function proChoose(i) {
+  if (Math.random() < 0.15) return choices[Math.random() * choices.length | 0];
+  const p = P[i];
+  let best = choices[0], bw = -1;
+  for (const to of choices) {
+    const w = Math.max(...proPaths(to, p.pos, false, left - 1).map((rest) => proWeight(i, [to, ...rest])));
+    if (w > bw) { bw = w; best = to; }
+  }
+  return best;
 }

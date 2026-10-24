@@ -40,7 +40,7 @@ const hasStock=i=>RK.some(r=>P[i].st[r]>0);
 /* ---------- 移動 ---------- */
 function roll(){
   if(phase!=='roll'||busy)return;
-  dice=force==='0'?1+(Math.random()*6|0):+force;
+  dice=force==='0'?((typeof diceHook==='function'&&diceHook())||1+(Math.random()*6|0)):+force;
   left=dice;phase='move';first=true;rollSeq++;
   log(`${pn(turn)} 擲出 ${dice}`);
   step();
