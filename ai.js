@@ -95,7 +95,7 @@ function aiRespond() {
   if (!offer) return;
   const o = offer, w = T[o.want], g = o.give >= 0 ? T[o.give] : null;
   let get = o.cash + (g ? landVal(g) : 0), lose = landVal(w);
-  if (g && T.every((t) => t.type !== 'land' || t.region !== g.region || t.id === g.id || owner[t.id] === o.to)) get *= 1.5; // 補齊整區獨佔
+  if (g && T.every((t) => t.type !== 'land' || t.region !== g.region || t.id === g.id || owner[t.id] === o.to)) get *= 1.5; // 補齊整區獨佔（股價、過路費 +20%、四塊地升級）
   if (monoOwner(w.region) === o.to) lose *= 2;                                                                          // 會拆掉自己的整區獨佔
   return get >= lose * 1.15 ? offerAccept() : offerDecline();
 }
