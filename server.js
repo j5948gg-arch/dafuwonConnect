@@ -6,7 +6,7 @@ const PIC_COUNT = 12, COLOR_COUNT = 8;
 // 圖片每次都從磁碟讀取（換圖後不必重啟伺服器），並用 ETag 讓瀏覽器每次先確認有沒有更新
 const img = (n) => { const b = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')); return { b, tag: '"' + require('crypto').createHash('md5').update(b).digest('hex') + '"' }; };
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist})';
 const NONE = JSON.stringify({ t: 'none' });
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));

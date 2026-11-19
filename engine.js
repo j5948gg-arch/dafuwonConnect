@@ -3,7 +3,7 @@ const picUrl=i=>`/img/p${PIC[i]!==undefined?PIC[i]:i}.png?v=${MAP.PIC_VER}`;cons
 let extraOn=false,pendingTrade=false,resumeMove=false;
 let mfx=[],mfxSeq=0,MFX_SEEN=null; // 玩家間金錢異動（動畫用）：{id,i,a}
 let mono={},monoLvDone={};   // 各區目前的獨佔者、是否已發過升級獎勵
-let offer=null,offerN=0,tradeUI=null,hist=[];   // 玩家間交易、每回合總資產紀錄
+let offer=null,offerN=0,tradeUI=null,hist=[],shist=[];   // 玩家間交易、每回合總資產紀錄
 const histNow=()=>P.map((_,i)=>assets(i));
 const mfxAdd=(i,a)=>{if(!a)return;mfx.push({id:++mfxSeq,i,a});if(mfx.length>8)mfx.shift();};
 const monoOwner=r=>{const ls=T.filter(t=>t.type==='land'&&t.region===r),o=owner[ls[0].id];return o!==undefined&&ls.every(t=>owner[t.id]===o)?o:-1;};
@@ -25,7 +25,7 @@ function reset(){
   owner={};lv={};inv={};mono={};monoLvDone={};winner=-1;chg=Object.fromEntries(RK.map(r=>[r,0]));stock=Object.fromEntries(RK.map(r=>[r,150+(Math.random()*151|0)]));
   qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;upUsed=0;upIds=[];flipUsed=false;justBought=-1;lastCard='';newDeck();
   turn=0;phase='roll';left=0;dice=0;rollSeq=0;first=true;choices=null;busy=false;need=null;extraOn=false;pendingTrade=false;resumeMove=false;mfx=[];mfxSeq=0;
-  logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];hist=[histNow()];offer=null;offerN=0;tradeUI=null;render();
+  logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];hist=[histNow()];shist=[{...stock}];offer=null;offerN=0;tradeUI=null;render();
 }
 const nm=id=>id==null?'—':T[id].name;
 const log=s=>{logs.unshift(s);if(logs.length>40)logs.pop();};
@@ -88,13 +88,15 @@ function bankrupt(i,to){
   if(P.filter(q=>q.alive).length<2){phase='over';winner=P.findIndex(q=>q.alive);hist.push(histNow());log(`${pn(winner)} 獲勝！`);render();}
   else endTurn();
 }
+const mustFlip=()=>phase==='act'&&T[P[turn].pos].type==='gem'&&!flipUsed&&deck.some(d=>d.by<0);   // 停在寶石格、還有牌可翻、本回合還沒翻 → 不能結束回合
 function endTurn(){
   if(phase==='over'||need||ask||alloc||extraOn||offer)return;
+  if(P[turn].alive&&mustFlip())return;   // 破產出局時不受限
   const old=turn;do{turn=(turn+1)%np;}while(!P[turn].alive);
   upUsed=0;upIds=[];flipUsed=false;justBought=-1;traded={};extraOn=false;offerN=0;
   if(turn<=old)hist.push(histNow());   // 繞完一圈（每位玩家都行動過）：記錄各人總資產
   if(deck.every(d=>d.by>=0)){newDeck();log('49 張牌已翻完，重新洗牌');}
-  phase='roll';first=true;render();
+  phase='roll';first=true;shist.push({...stock});render();   // 每位玩家結束回合時記錄一次股價（股市折線圖用）
 }
 
 /* ---------- 起點、勝利、股價 ---------- */
@@ -267,14 +269,34 @@ function flipAt(s){
 }
 let CARD_OPEN=false;   // 翻牌區平常收起；玩家自己按「查看翻牌區」才展開（只影響自己的畫面）
 const toggleCards=()=>{CARD_OPEN=!CARD_OPEN;render();};
+let FLIP_SHOWN=false;   // 翻牌區蓋上地圖時，只自動捲到地圖一次
+function cardCells(can){return deck.map((d,k)=>d.by<0?`<div class="cd${can?' can':''}" ${can?`onclick="flipAt(${k})"`:''}>${k+1}</div>`:`<div class="cd on" style="background:${C[d.by]};color:${ink(C[d.by])}" title="${CARDS[d.c].name}">${k+1}<small>P${d.by+1}</small></div>`).join('');}
 function cardBox(){
   const p=P[turn],can=phase==='act'&&!need&&!ask&&!alloc&&!flipUsed&&T[p.pos].type==='gem';
-  if(!can&&!CARD_OPEN)return `<div style="margin-top:8px"><button onclick="toggleCards()">查看翻牌區</button></div>`; // 只有需要翻牌時才自動顯示
-  return `<div class="box" style="margin-top:8px"><b>翻牌區</b>${can?'':' <button onclick="toggleCards()" style="margin:0 0 0 6px;padding:2px 10px">收起</button>'}（${can?'<span class="hint">請點選一個數字翻牌</span>':'停在寶石格可自選一張牌翻開；橫向連線每張 +100'}）<div class="cg">`+
-    deck.map((d,k)=>d.by<0?`<div class="cd${can?' can':''}" ${can?`onclick="flipAt(${k})"`:''}>${k+1}</div>`:`<div class="cd on" style="background:${C[d.by]};color:${ink(C[d.by])}" title="${CARDS[d.c].name}">${k+1}<small>P${d.by+1}</small></div>`).join('')+
-    `</div>${lastCard?`<div style="margin-top:4px">${lastCard}</div>`:''}</div>`;
+  if(can&&(ME<0||ME===turn))   // 輪到自己翻牌：翻牌區直接蓋在地圖上，不必另外往下捲
+    return `<div class="cov"><div class="box"><b>翻牌</b>　<span class="hint">請點選一張牌（翻牌後才能結束回合）</span><div class="cg">${cardCells(true)}</div><div style="margin-top:6px;font-size:12px">橫向連線（同一排）每多一張，獎金多 100</div></div></div>`;
+  if(!can&&!CARD_OPEN)return `<div style="margin-top:8px"><button class="nw" onclick="toggleCards()">查看翻牌區</button></div>`;
+  return `<div class="box" style="margin-top:8px"><b>翻牌區</b>${can?'':' <button class="nw" onclick="toggleCards()" style="margin:0 0 0 6px;padding:2px 10px">收起</button>'}（${can?'<span class="hint">等待'+pn(turn)+'翻牌</span>':'停在寶石格可自選一張牌翻開；橫向連線每張 +100'}）<div class="cg">${cardCells(false)}</div>${lastCard?`<div style="margin-top:4px">${lastCard}</div>`:''}</div>`;
 }
 
+
+/* ---------- 股市折線圖：每位玩家結束回合記錄一點，最右邊是即時股價 ---------- */
+let STK_VIEW='chart',STK_SEEN=-1;
+const setStk=v=>{STK_VIEW=v;render();};
+const RCOL={africa:'#c98a00',oceania:'#1e88e5',asia:'#e53935',america:'#2e9d4f',europe:'#8e44ad'};
+function stockChart(){
+  const all=(shist||[]).slice(-40).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
+  const W=360,Ht=210,L=40,R=10,Tp=10,B=24,vals=all.flatMap(x=>RK.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
+  const X=k=>n<2?L:L+(W-L-R)*k/(n-1),Y=v=>Tp+(Ht-Tp-B)*(1-(v-lo)/(hi-lo||1));
+  let g='';
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
+  const step=Math.max(1,Math.ceil((n-1)/8));
+  for(let k=0;k<n;k+=1)if(k%step===0||k===n-1)g+=`<text x="${X(k)}" y="${Ht-7}" font-size="10" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
+  const lines=RK.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
+  const prev=n>=2?all[n-2]:stock;
+  const lg=RK.map(r=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0;return `<span style="margin-right:10px;white-space:nowrap"><span class="sw" style="background:${RCOL[r]}"></span>${RN(r)} <b>${stock[r]}</b>${d?` <small style="color:${d>0?'#e04b4b':'#2aa86a'}">${d>0?'▲':'▼'}${Math.abs(d)}</small>`:''} <small>(${pc>=0?'+':''}${pc}%)</small></span>`;}).join('');
+  return `<svg viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${g}${lines}</svg><div style="font-size:12px;line-height:1.7">${lg}</div><div style="font-size:11px;opacity:.75">橫軸：第幾位玩家結束回合（現＝即時）；括號為相對開局股價</div>`;
+}
 const chgTxt=r=>chg[r]?` <small style="color:${chg[r]>0?'#e04b4b':'#2aa86a'}">${chg[r]>0?'▲':'▼'}${Math.abs(chg[r])}</small>`:'';
 function costTxt(r){
   const p=P[turn],q=Math.max(1,Math.min(MAXT,qty[r]|0)),c=q*stock[r];
@@ -541,7 +563,9 @@ function render(){
   else if(phase==='roll'){const o=MAP.options(p.pos,p.prev,true);if(o.length>1)arrows=o.map(to=>arrow(p.pos,to,false)).join('');}
   if(!$('#bd svg'))$('#bd').innerHTML=`<svg viewBox="0 0 ${VW} ${VH}"><g id="gl"></g><g id="gk"></g><g id="ga"></g></svg><div id="cb"></div>`;
   $('#gl').innerHTML=lines+T.map(tileSvg).join('');$('#ga').innerHTML=arrows;$('#cb').innerHTML=cardBox();updateTokens();
+  if($('#cb .cov')){if(!FLIP_SHOWN){FLIP_SHOWN=true;$('#bd').scrollIntoView({behavior:'smooth',block:'start'});}}else FLIP_SHOWN=false;
 
+  if((shist||[]).length!==STK_SEEN){STK_SEEN=(shist||[]).length;STK_VIEW='chart';}   // 每位玩家結束回合：自動顯示股價折線圖，之後可自由切換
   const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&((t.type==='stock'&&!upUsed)||extraOn);
   let act='';
   if(phase==='over'){
@@ -558,7 +582,7 @@ function render(){
       const l=lv[t.id]||0;
       act+=l>=5?(()=>{const ls=lands(turn).filter(x=>(lv[x.id]||0)<5&&x.id!==justBought&&!upIds.includes(x.id));return upFull()?'<div>S 級地：本回合已升級兩塊地</div>':ls.length?`<div class="hint">自己的 S 級地：可選擇兩塊持有的地各升級一級（還可升級 ${upCap()-upUsed} 塊）</div>`+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'<div>已是最高級 S（商業區），沒有其他可升級的土地</div>';})():justBought===t.id?'<div>剛買下，下次再踩到才能升級</div>':upFull()?'<div>本回合已升級過</div>':`<button class="big" onclick="upgradeAt(${t.id})">升級 ${LV[l]}→${LV[l+1]}（${MAP.LEVEL_NAMES[l+1]}）${money(upOf(t))}</button>`;
     }else if(t.type==='land')act+=(lv[t.id]||0)>MAP.BUYOUT_MAX_LV?`<div>此地為 ${LV[lv[t.id]||0]} 級，只有 E 級土地可被強制併購</div>`:`<button class="big" onclick="buyout()">強制併購 ${money(MAP.BUYOUT_MULT*t.price)}</button><div style="font-size:12px">原價×${MAP.BUYOUT_MULT}，付給${pn(own)}（僅限 E 級）</div>`;
-    if(t.type==='gem')act+=flipUsed?'<div>本回合已翻牌</div>':'<div class="hint">請在地圖下方的翻牌區點選一個數字</div>';
+    if(t.type==='gem')act+=flipUsed?`<div>本回合已翻牌${lastCard?'：'+lastCard:''}</div>`:mustFlip()?'<div class="hint">請先翻牌，翻完才能結束回合</div>':'';
     if(t.type==='start'){
       const ls=lands(turn).filter(x=>(lv[x.id]||0)<5);
       act+=upFull()?'<div>本回合已升級過</div>':ls.length?'<div>起點：可升級一塊地</div>'+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'<div>沒有可升級的土地</div>';
@@ -569,7 +593,7 @@ function render(){
     }
     if(trading)act+='<div class="hint">可於下方交易股票</div>';
     if(extraOn)act+='<button onclick="closeExtra()">結束股市交易</button>';
-    act+=`<button onclick="endTurn()">結束回合</button>`;
+    act+=`<button onclick="endTurn()" ${mustFlip()?'disabled title="請先翻牌"':''}>結束回合</button>`;
   }
   if(ROLL_SEEN===null||rollSeq<ROLL_SEEN)ROLL_SEEN=rollSeq;
   else if(rollSeq>ROLL_SEEN){ROLL_SEEN=rollSeq;ROLL_UNTIL=Date.now()+1500;rollFx();}
@@ -577,8 +601,10 @@ function render(){
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">${pnA(turn)}</b>　<span class="dice">🎲 ${dice||'-'}</span>${dz}<br>${act}</div>`;
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
   const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><img class="pp" src="${picUrl(i)}" alt="${MAP.PIC_NAMES[PIC[i]]||''}"><b>${pnA(i)}</b>${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}${tradeBtn(i)}</div>`}).join('');
-  const stk=`<div class="box"><b>股市</b>（每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股；股價隨買賣、升級、過路費波動）<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
-    RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2)}</td>${P.map((q,i)=>`<td${trading&&i===turn?' style="background:var(--accent);color:#222;font-weight:700"':''}>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`+
+  const tbl=`<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
+    RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2)}</td>${P.map((q,i)=>`<td${trading&&i===turn?' style="background:var(--accent);color:#222;font-weight:700"':''}>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`;
+  const sel=v=>STK_VIEW===v?' style="outline:2px solid var(--accent);font-weight:700"':'';
+  const stk=`<div class="box"><b>股市</b> <button class="nw" onclick="setStk('chart')"${sel('chart')}>📈 折線圖</button><button class="nw" onclick="setStk('hold')"${sel('hold')}>📋 持有數</button><div style="font-size:12px">每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股；股價隨買賣、升級、過路費波動</div>${STK_VIEW==='chart'?stockChart():tbl}`+
     (trading?'<hr>'+RK.map(r=>traded[r]?`<div>${RN(r)} 🔒 本次已交易，暫時關閉</div>`:`<div>${RN(r)} <span style="background:var(--accent);color:#222;font-weight:700;padding:1px 7px;border-radius:10px">持有 ${P[turn].st[r]}</span> <input type="number" min="1" max="99" value="${qty[r]}" oninput="setQty('${r}',this.value)">
       <button onclick="trade('${r}',1)">買</button><button onclick="trade('${r}',-1)">賣</button><button onclick="qty['${r}']=99;render()">99</button><button onclick="maxBuy('${r}')">最大</button><div style="font-size:12px" id="c_${r}">${costTxt(r)}</div></div>`).join('')+'<div style="font-size:12px">每區每次停留只能交易一次（買或賣擇一）</div>':'')+`</div>`;
   const ctl=`<div class="box">玩家數 <select onchange="np=+this.value;reset()">${[1,2,3,4].map(n=>`<option ${n===np?'selected':''}>${n}</option>`).join('')}</select>
