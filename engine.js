@@ -280,22 +280,38 @@ function cardBox(){
 }
 
 
-/* ---------- 股市折線圖：每位玩家結束回合記錄一點，最右邊是即時股價 ---------- */
-let STK_VIEW='chart',STK_SEEN=-1;
-const setStk=v=>{STK_VIEW=v;render();};
+/* ---------- 股市折線圖（地圖上半區空白處）與持有數（地圖下半區空白處）：直接畫在地圖 SVG 裡，跟著地圖縮放，不會壓到格子 ---------- */
+// 空白區：x 在「第二欄左緣 ~ 倒數第二欄右緣」之間；y 夾在外圈上下列與中線格之間（外圈左右兩欄與兩個岔路斜線都不會碰到）
+const PNL=(()=>{const x0=cx({x:-2})-W/2+4,x1=cx({x:2})+W/2-4;return{top:{x:x0,y:cy({y:3})+H/2+8,w:x1-x0,h:(cy({y:0})-H/2-12)-(cy({y:3})+H/2+8)},bot:{x:x0,y:cy({y:0})+H/2+12,w:x1-x0,h:(cy({y:-3})-H/2-8)-(cy({y:0})+H/2+12)}};})();
 const RCOL={africa:'#c98a00',oceania:'#1e88e5',asia:'#e53935',america:'#2e9d4f',europe:'#8e44ad'};
-function stockChart(){
+const panelBg=(p,title)=>`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="8" fill="var(--panel)" stroke="var(--bd)" stroke-width="1.5" opacity=".96"/><text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">${title}</text>`;
+function stockChartSvg(p){
   const all=(shist||[]).slice(-40).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
-  const W=360,Ht=210,L=40,R=10,Tp=10,B=24,vals=all.flatMap(x=>RK.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
-  const X=k=>n<2?L:L+(W-L-R)*k/(n-1),Y=v=>Tp+(Ht-Tp-B)*(1-(v-lo)/(hi-lo||1));
-  let g='';
-  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
+  const L=p.x+36,Rr=p.x+p.w-156,Tp=p.y+26,Bt=p.y+p.h-22,vals=all.flatMap(x=>RK.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
+  const X=k=>n<2?L:L+(Rr-L)*k/(n-1),Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1));
+  let g=panelBg(p,'股價走勢（每位玩家結束回合記錄一點）');
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="11" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
   const step=Math.max(1,Math.ceil((n-1)/8));
-  for(let k=0;k<n;k+=1)if(k%step===0||k===n-1)g+=`<text x="${X(k)}" y="${Ht-7}" font-size="10" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
-  const lines=RK.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
+  for(let k=0;k<n;k++)if(k%step===0||k===n-1)g+=`<text x="${X(k)}" y="${p.y+p.h-7}" font-size="11" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
+  g+=RK.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
   const prev=n>=2?all[n-2]:stock;
-  const lg=RK.map(r=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0;return `<span style="margin-right:10px;white-space:nowrap"><span class="sw" style="background:${RCOL[r]}"></span>${RN(r)} <b>${stock[r]}</b>${d?` <small style="color:${d>0?'#e04b4b':'#2aa86a'}">${d>0?'▲':'▼'}${Math.abs(d)}</small>`:''} <small>(${pc>=0?'+':''}${pc}%)</small></span>`;}).join('');
-  return `<svg viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${g}${lines}</svg><div style="font-size:12px;line-height:1.7">${lg}</div><div style="font-size:11px;opacity:.75">橫軸：第幾位玩家結束回合（現＝即時）；括號為相對開局股價</div>`;
+  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,y=p.y+40+k*28,x=p.x+p.w-146;
+    return `<rect x="${x}" y="${y-9}" width="10" height="10" rx="5" fill="${RCOL[r]}"/><text x="${x+15}" y="${y}" font-size="12" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="10"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+15}" y="${y+12}" font-size="10" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text>`;}).join('');
+  return g;
+}
+function holdSvg(p,trading){
+  const np_=P.length,cols=3+np_,x0=p.x+10,cw=(p.w-20)/cols,rh=(p.h-30)/6;
+  let g=panelBg(p,'股市持有數（張）');
+  const cell=(c,r,txt,o='')=>`<text x="${x0+(c===0?0:c*cw+cw/2-(c>0?0:0))}" y="${p.y+30+r*rh+rh*.68}" font-size="13" ${c===0?'':'text-anchor="middle"'} fill="var(--fg)" ${o}>${txt}</text>`;
+  const hd=['區域','股價','費×',...P.map((_,i)=>'P'+(i+1))];
+  if(trading)g+=`<rect x="${x0+(3+turn)*cw}" y="${p.y+28}" width="${cw}" height="${rh*6}" fill="var(--accent)" opacity=".35"/>`;
+  hd.forEach((h,c)=>{g+=cell(c,0,h,c>=3?`font-weight="700" fill="${C[c-3]}"`:'font-weight="700"');});
+  g+=`<line x1="${x0}" x2="${p.x+p.w-10}" y1="${p.y+30+rh}" y2="${p.y+30+rh}" stroke="var(--line)"/>`;
+  RK.forEach((r,k)=>{const row=k+1;
+    g+=`<rect x="${x0}" y="${p.y+30+row*rh+rh*.25}" width="9" height="9" rx="4" fill="${RCOL[r]}"/><text x="${x0+14}" y="${p.y+30+row*rh+rh*.68}" font-size="13" fill="var(--fg)">${RK.indexOf(r)+1}區 ${RN(r)}</text>`;
+    g+=cell(1,row,`<tspan font-weight="700">${stock[r]}</tspan>`)+cell(2,row,((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2));
+    P.forEach((q,i)=>{g+=cell(3+i,row,q.st[r],trading&&i===turn?'font-weight="700"':'');});});
+  return g;
 }
 const chgTxt=r=>chg[r]?` <small style="color:${chg[r]>0?'#e04b4b':'#2aa86a'}">${chg[r]>0?'▲':'▼'}${Math.abs(chg[r])}</small>`:'';
 function costTxt(r){
@@ -562,11 +578,11 @@ function render(){
   if(choices)arrows=choices.map(to=>arrow(p.pos,to,true)).join('');
   else if(phase==='roll'){const o=MAP.options(p.pos,p.prev,true);if(o.length>1)arrows=o.map(to=>arrow(p.pos,to,false)).join('');}
   if(!$('#bd svg'))$('#bd').innerHTML=`<svg viewBox="0 0 ${VW} ${VH}"><g id="gl"></g><g id="gk"></g><g id="ga"></g></svg><div id="cb"></div>`;
-  $('#gl').innerHTML=lines+T.map(tileSvg).join('');$('#ga').innerHTML=arrows;$('#cb').innerHTML=cardBox();updateTokens();
+  $('#ga').innerHTML=arrows;$('#cb').innerHTML=cardBox();updateTokens();
   if($('#cb .cov')){if(!FLIP_SHOWN){FLIP_SHOWN=true;$('#bd').scrollIntoView({behavior:'smooth',block:'start'});}}else FLIP_SHOWN=false;
 
-  if((shist||[]).length!==STK_SEEN){STK_SEEN=(shist||[]).length;STK_VIEW='chart';}   // 每位玩家結束回合：自動顯示股價折線圖，之後可自由切換
   const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&((t.type==='stock'&&!upUsed)||extraOn);
+  $('#gl').innerHTML=lines+stockChartSvg(PNL.top)+holdSvg(PNL.bot,trading)+T.map(tileSvg).join('');
   let act='';
   if(phase==='over'){
     const ord=[winner,...P.map((_,i)=>i).filter(i=>i!==winner).sort((a,b)=>assets(b)-assets(a))];
@@ -601,10 +617,7 @@ function render(){
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">${pnA(turn)}</b>　<span class="dice">🎲 ${dice||'-'}</span>${dz}<br>${act}</div>`;
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
   const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><img class="pp" src="${picUrl(i)}" alt="${MAP.PIC_NAMES[PIC[i]]||''}"><b>${pnA(i)}</b>${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}${tradeBtn(i)}</div>`}).join('');
-  const tbl=`<table><tr><th>區域</th><th>股價</th><th>費×</th>${P.map((_,i)=>`<th style="color:${C[i]}">P${i+1}</th>`).join('')}</tr>`+
-    RK.map(r=>`<tr><td><span class="sw" style="background:${MAP.REGIONS[r].color};border:1px solid #888"></span>${RK.indexOf(r)+1}區 ${RN(r)}</td><td><b>${stock[r]}</b>${chgTxt(r)}</td><td>${((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2)}</td>${P.map((q,i)=>`<td${trading&&i===turn?' style="background:var(--accent);color:#222;font-weight:700"':''}>${q.st[r]}</td>`).join('')}</tr>`).join('')+`</table>`;
-  const sel=v=>STK_VIEW===v?' style="outline:2px solid var(--accent);font-weight:700"':'';
-  const stk=`<div class="box"><b>股市</b> <button class="nw" onclick="setStk('chart')"${sel('chart')}>📈 折線圖</button><button class="nw" onclick="setStk('hold')"${sel('hold')}>📋 持有數</button><div style="font-size:12px">每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股；股價隨買賣、升級、過路費波動</div>${STK_VIEW==='chart'?stockChart():tbl}`+
+  const stk=`<div class="box"><b>股市</b>　<span style="font-size:12px">股價走勢與各人持有數在地圖中間；每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股</span>`+
     (trading?'<hr>'+RK.map(r=>traded[r]?`<div>${RN(r)} 🔒 本次已交易，暫時關閉</div>`:`<div>${RN(r)} <span style="background:var(--accent);color:#222;font-weight:700;padding:1px 7px;border-radius:10px">持有 ${P[turn].st[r]}</span> <input type="number" min="1" max="99" value="${qty[r]}" oninput="setQty('${r}',this.value)">
       <button onclick="trade('${r}',1)">買</button><button onclick="trade('${r}',-1)">賣</button><button onclick="qty['${r}']=99;render()">99</button><button onclick="maxBuy('${r}')">最大</button><div style="font-size:12px" id="c_${r}">${costTxt(r)}</div></div>`).join('')+'<div style="font-size:12px">每區每次停留只能交易一次（買或賣擇一）</div>':'')+`</div>`;
   const ctl=`<div class="box">玩家數 <select onchange="np=+this.value;reset()">${[1,2,3,4].map(n=>`<option ${n===np?'selected':''}>${n}</option>`).join('')}</select>
