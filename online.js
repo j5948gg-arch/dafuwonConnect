@@ -6,7 +6,7 @@ const rpc = (fn, ...args) => tx({ t: 'act', fn, args });
 qty = Object.fromEntries(RK.map((r) => [r, 1]));
 
 roll = () => rpc('roll'); pick = (to) => rpc('pick', to); buyLand = () => rpc('buyLand'); buyout = () => rpc('buyout');
-upgradeAt = (id) => rpc('upgradeAt', id); endTurn = () => rpc('endTurn'); flipAt = (k) => rpc('flipAt', k);
+upgradeAt = (id) => rpc('upgradeAt', id); endTurn = () => rpc('endTurn'); flipAt = (k) => rpc('flipAt', k); cardOk = () => rpc('cardOk');
 askPick = (k) => rpc('askPick', k); askSkip = () => rpc('askSkip');
 allocOk = () => tx({ t: 'act', fn: 'allocOk', args: [], vals: alloc.vals });
 trade = (r, s) => tx({ t: 'act', fn: 'trade', args: [r, s], q: qty[r] });
@@ -17,7 +17,7 @@ closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow } = s);
 }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);

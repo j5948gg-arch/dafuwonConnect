@@ -3,7 +3,8 @@ const picUrl=i=>`/img/p${PIC[i]!==undefined?PIC[i]:i}.png?v=${MAP.PIC_VER}`;cons
 let extraOn=false,pendingTrade=false,resumeMove=false;
 let mfx=[],mfxSeq=0,MFX_SEEN=null; // 玩家間金錢異動（動畫用）：{id,i,a}
 let mono={},monoLvDone={};   // 各區目前的獨佔者、是否已發過升級獎勵
-let offer=null,offerN=0,tradeUI=null,hist=[],shist=[];   // 玩家間交易、每回合總資產紀錄
+let offer=null,offerN=0,tradeUI=null,hist=[],shist=[],cardShow=null;   // cardShow：翻開、等玩家按確認才執行的牌 {s,c,by,n,a,b}
+   // 玩家間交易、每回合總資產紀錄
 const histNow=()=>P.map((_,i)=>assets(i));
 const mfxAdd=(i,a)=>{if(!a)return;mfx.push({id:++mfxSeq,i,a});if(mfx.length>8)mfx.shift();};
 const monoOwner=r=>{const ls=T.filter(t=>t.type==='land'&&t.region===r),o=owner[ls[0].id];return o!==undefined&&ls.every(t=>owner[t.id]===o)?o:-1;};
@@ -23,7 +24,7 @@ let P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUs
 function reset(){
   P=Array.from({length:np},()=>({pos:0,prev:null,cash:START_CASH,alive:true,gems:{},level:1,st:Object.fromEntries(RK.map(r=>[r,0]))}));
   owner={};lv={};inv={};mono={};monoLvDone={};winner=-1;chg=Object.fromEntries(RK.map(r=>[r,0]));stock=Object.fromEntries(RK.map(r=>[r,150+(Math.random()*151|0)]));
-  qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;upUsed=0;upIds=[];flipUsed=false;justBought=-1;lastCard='';newDeck();
+  qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;cardShow=null;upUsed=0;upIds=[];flipUsed=false;justBought=-1;lastCard='';newDeck();
   turn=0;phase='roll';left=0;dice=0;rollSeq=0;first=true;choices=null;busy=false;need=null;extraOn=false;pendingTrade=false;resumeMove=false;mfx=[];mfxSeq=0;
   logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];hist=[histNow()];shist=[{...stock}];offer=null;offerN=0;tradeUI=null;render();
 }
@@ -90,7 +91,7 @@ function bankrupt(i,to){
 }
 const mustFlip=()=>phase==='act'&&T[P[turn].pos].type==='gem'&&!flipUsed&&deck.some(d=>d.by<0);   // 停在寶石格、還有牌可翻、本回合還沒翻 → 不能結束回合
 function endTurn(){
-  if(phase==='over'||need||ask||alloc||extraOn||offer)return;
+  if(phase==='over'||need||ask||alloc||cardShow||extraOn||offer)return;
   if(P[turn].alive&&mustFlip())return;   // 破產出局時不受限
   const old=turn;do{turn=(turn+1)%np;}while(!P[turn].alive);
   upUsed=0;upIds=[];flipUsed=false;justBought=-1;traded={};extraOn=false;offerN=0;
@@ -255,24 +256,80 @@ function newDeck(){
 }
 function flipAt(s){
   const p=P[turn];
-  if(phase!=='act'||need||ask||alloc||flipUsed||T[p.pos].type!=='gem'||deck[s].by>=0)return;
+  if(phase!=='act'||need||ask||alloc||cardShow||flipUsed||T[p.pos].type!=='gem'||deck[s].by>=0)return;
   const i=turn,cd=CARDS[deck[s].c];
   deck[s].by=i;flipUsed=true;
   lastCard=`#${s+1} ${pn(i)} 翻到：${cd.name}`;log(lastCard);
   const row=Math.floor(s/7)*7;let a=s,b=s;
   while(a>row&&deck[a-1].by===i)a--;
   while(b<row+6&&deck[b+1].by===i)b++;
-  const n=b-a+1;
-  if(n>=2){P[i].cash+=100*n;log(`橫向連線 ${n} 張（#${a+1}~#${b+1}），獎金 ${100*n}`);}
-  cd.fn(i);
+  cardShow={s,c:deck[s].c,by:i,n:b-a+1,a,b};   // 先顯示圖案與效果，等玩家按「確認」才真正執行
   render();
+}
+function cardOk(){
+  if(!cardShow)return;
+  const {c,by:i,n,a,b}=cardShow;cardShow=null;
+  if(n>=2){P[i].cash+=100*n;log(`橫向連線 ${n} 張（#${a+1}~#${b+1}），獎金 ${100*n}`);}
+  CARDS[c].fn(i);
+  render();
+}
+
+/* ---------- 卡牌圖案：依效果分類畫成圖示，底色依類型（金錢＝金、股票＝藍、過路費／土地＝橘綠、移動＝紫、寶石＝粉） ---------- */
+const CKIND=[[/前進一格/,'forward'],[/給所有人.*元/,'give'],[/從所有人獲得|向一人收取/,'take'],[/所有人的現金相加/,'split'],[/所有人現金增加/,'coin'],[/擲骰點數/,'dice'],
+  [/寶石/,'gem'],[/交換位置/,'swap'],[/傳送|返回起點|回到起點/,'portal'],[/平分總股票|隨意分配/,'split'],[/拋售|販賣/,'sell'],[/額外獲得一次股市/,'trade'],
+  [/升為|全部升一級/,'build'],[/過路費/,'toll'],[/回歸原始值/,'reset'],[/上升|下降|翻倍|減半|相同/,'chart'],[/股票.*張/,'stock']];
+const CHUE={forward:'#7b5cd6',portal:'#7b5cd6',swap:'#7b5cd6',give:'#d9a100',take:'#d9a100',coin:'#d9a100',dice:'#d9a100',split:'#d9a100',gem:'#d6457f',sell:'#2f6fdb',trade:'#2f6fdb',chart:'#2f6fdb',reset:'#2f6fdb',stock:'#2f6fdb',toll:'#e0762a',build:'#2e9d4f'};
+function cardBadge(n){
+  let m;
+  if(m=n.match(/\*(\d+)元/))return '×'+m[1];
+  if(m=n.match(/(\d+)張/))return '+'+m[1];
+  if(m=n.match(/(上升|提升|增加)(\d+)%/))return '+'+m[2]+'%';
+  if(m=n.match(/(下降|減少)(\d+)%/))return '−'+m[2]+'%';
+  if(/翻倍/.test(n))return '×2';if(/減半/.test(n))return '×½';if(/五倍/.test(n))return '×5';if(/兩倍/.test(n))return '×2';
+  if(m=n.match(/(\d+)元/))return m[1];
+  if(/相同/.test(n))return '＝最高';
+  return '';
+}
+function cardArt(idx){
+  const nm=CARDS[idx].name,k=(CKIND.find(x=>x[0].test(nm))||[0,'coin'])[1],hue=CHUE[k]||'#7b5cd6',bd=cardBadge(nm);
+  const W_='#fff',S=w=>`stroke="${W_}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" fill="none"`,fl=`fill="${W_}"`;
+  const coin=(x,y,r,t)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="#ffd54a" stroke="#fff" stroke-width="3"/><text x="${x}" y="${y+r*.36}" font-size="${r*1.05}" font-weight="800" text-anchor="middle" fill="#a97800">${t||'$'}</text>`;
+  const up=/上升|提升|增加|翻倍|相同/.test(nm)&&!/下降|減半/.test(nm);
+  const reg=(nm.match(/獲得(\d)區/)||[])[1];
+  let g='';
+  switch(k){
+    case 'forward':g=`<path d="M22 60h60M62 38l24 22-24 22" ${S(7)}/><circle cx="28" cy="84" r="5" ${fl}/><circle cx="46" cy="90" r="5" ${fl}/>`;break;
+    case 'give':g=coin(42,58,24)+`<path d="M74 44l24 0M74 60h28M74 76h24" ${S(5)}/>`+`<path d="M92 36l10 8-10 8M96 52l8 8-8 8" ${S(4)}/>`;break;
+    case 'take':g=coin(78,58,24)+`<path d="M46 44h-24M46 60h-28M46 76h-24" ${S(5)}/><path d="M38 36l10 8-10 8" ${S(4)}/>`;break;
+    case 'coin':g=coin(60,58,32)+`<text x="60" y="104" font-size="16" font-weight="800" text-anchor="middle" ${fl}>＋＋</text>`;break;
+    case 'dice':g=`<rect x="26" y="26" width="68" height="68" rx="14" ${fl}/>`+[[44,44],[76,44],[60,60],[44,76],[76,76]].map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="6.5" fill="${hue}"/>`).join('');break;
+    case 'split':g=`<circle cx="60" cy="60" r="34" ${fl}/><path d="M60 60V26M60 60l30 17M60 60L30 77" stroke="${hue}" stroke-width="5"/>`;break;
+    case 'gem':g=`<polygon points="36,42 84,42 100,60 60,100 20,60" ${fl}/><path d="M20 60h80M36 42l24 58 24-58M48 42l12 18 12-18" stroke="${hue}" stroke-width="3.5" fill="none" stroke-linejoin="round"/>`;break;
+    case 'swap':g=`<circle cx="30" cy="62" r="13" ${fl}/><circle cx="90" cy="62" r="13" ${fl}/><path d="M36 38q24-20 48 0M76 30l10 8-12 4M84 86q-24 20-48 0M44 94l-10-8 12-4" ${S(5)}/>`;break;
+    case 'portal':g=`<ellipse cx="60" cy="60" rx="38" ry="38" ${S(5)}/><ellipse cx="60" cy="60" rx="26" ry="26" ${S(5)} opacity=".8"/><ellipse cx="60" cy="60" rx="14" ry="14" ${S(5)} opacity=".6"/><circle cx="60" cy="60" r="5" ${fl}/>`;break;
+    case 'sell':g=`<path d="M24 28h40l32 32-36 36-36-36z" ${fl}/><circle cx="42" cy="46" r="6" fill="${hue}"/><text x="66" y="72" font-size="26" font-weight="800" text-anchor="middle" fill="${hue}">$</text>`;break;
+    case 'trade':g=[[28,52,18],[52,40,30],[76,58,16]].map(c=>`<path d="M${c[0]+6} ${c[1]-8}v${c[2]+16}" stroke="#fff" stroke-width="3"/><rect x="${c[0]-2}" y="${c[1]}" width="16" height="${c[2]}" rx="2" ${fl}/>`).join('')+`<path d="M92 40a18 18 0 1 1-6 22M92 28v14h-14" ${S(5)}/>`;break;
+    case 'build':g=`<rect x="22" y="64" width="22" height="34" ${fl}/><rect x="49" y="46" width="22" height="52" ${fl}/><rect x="76" y="26" width="22" height="72" ${fl}/><path d="M24 50l18-18M42 32v12M42 32h-12" ${S(4)}/>`;break;
+    case 'toll':g=`<path d="M60 22L22 54h12v40h52V54h12z" ${fl}/><rect x="52" y="66" width="16" height="28" fill="${hue}"/>`+coin(88,40,16);break;
+    case 'reset':g=`<path d="M92 56a32 32 0 1 0-8 24M92 36v22H70" ${S(6)}/><path d="M42 70l12-14 10 8 14-18" ${S(5)}/>`;break;
+    case 'chart':g=`<path d="M20 90V26M20 90h84" stroke="#fff" stroke-width="4" opacity=".7"/>`+(/相同/.test(nm)?`<path d="M26 56h68" ${S(7)} stroke-dasharray="8 8"/><path d="M26 82l20-14 16 8 30-34" ${S(7)}/>`:up?`<path d="M26 84l22-18 16 10 32-40M78 36h16v16" ${S(7)}/>`:`<path d="M26 36l22 18 16-10 32 40M78 84h16V68" ${S(7)}/>`);break;
+    case 'stock':{const cols=reg?[RCOL[RK[reg-1]]]:/所有區域/.test(nm)?RK.map(r=>RCOL[r]):/某區/.test(nm)?['#e53935','#1e88e5','#2e9d4f']:[hue];
+      g=`<rect x="22" y="26" width="76" height="68" rx="8" ${fl}/>`+cols.map((c,j)=>`<rect x="22" y="${26+j*(68/cols.length)}" width="76" height="${68/cols.length}" fill="${c}" opacity=".9"/>`).join('')+`<path d="M34 54h52M34 66h40M34 78h46" stroke="#fff" stroke-width="4" opacity=".85" stroke-linecap="round"/><rect x="22" y="26" width="76" height="68" rx="8" fill="none" stroke="#fff" stroke-width="4"/>`;break;}
+  }
+  const bdg=bd?`<rect x="62" y="84" width="52" height="28" rx="14" fill="#fff" stroke="${hue}" stroke-width="3"/><text x="88" y="104" font-size="${bd.length>4?12:16}" font-weight="800" text-anchor="middle" fill="${hue}">${bd}</text>`:'';
+  return `<svg viewBox="0 0 120 120" class="cart"><defs><linearGradient id="cg${idx}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${hue}" stop-opacity=".78"/><stop offset="1" stop-color="${hue}"/></linearGradient></defs><rect x="2" y="2" width="116" height="116" rx="18" fill="url(#cg${idx})" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><circle cx="60" cy="60" r="50" fill="#fff" opacity=".1"/>${g}${bdg}</svg>`;
+}
+function cardModal(){
+  const cd=CARDS[cardShow.c],mine=ME<0||ME===cardShow.by,nm=cd.name;
+  const hint=/隨機/.test(nm)?'🎲 對象由系統隨機決定':/指定|選擇|任一|某|隨意分配/.test(nm)?'👆 確認後由你選擇目標':'';
+  return `<div class="md"><div class="box cardm"><div class="cnum">#${cardShow.s+1}　<b style="color:${C[cardShow.by]}">${pn(cardShow.by)}</b> 翻到</div>${cardArt(cardShow.c)}<div class="ceff">${nm}</div>${hint?`<div class="csub">${hint}</div>`:''}${cardShow.n>=2?`<div class="csub">橫向連線 ${cardShow.n} 張，確認後可得獎金 ${100*cardShow.n}</div>`:''}${mine?'<button class="big" onclick="cardOk()">確認，執行效果</button>':`<div class="csub">等待 ${pn(cardShow.by)} 確認…</div>`}</div></div>`;
 }
 let CARD_OPEN=false;   // 翻牌區平常收起；玩家自己按「查看翻牌區」才展開（只影響自己的畫面）
 const toggleCards=()=>{CARD_OPEN=!CARD_OPEN;render();};
 let FLIP_SHOWN=false;   // 翻牌區蓋上地圖時，只自動捲到地圖一次
 function cardCells(can){return deck.map((d,k)=>d.by<0?`<div class="cd${can?' can':''}" ${can?`onclick="flipAt(${k})"`:''}>${k+1}</div>`:`<div class="cd on" style="background:${C[d.by]};color:${ink(C[d.by])}" title="${CARDS[d.c].name}">${k+1}<small>P${d.by+1}</small></div>`).join('');}
 function cardBox(){
-  const p=P[turn],can=phase==='act'&&!need&&!ask&&!alloc&&!flipUsed&&T[p.pos].type==='gem';
+  const p=P[turn],can=phase==='act'&&!need&&!ask&&!alloc&&!cardShow&&!flipUsed&&T[p.pos].type==='gem';
   if(can&&(ME<0||ME===turn))   // 輪到自己翻牌：翻牌區直接蓋在地圖上，不必另外往下捲
     return `<div class="cov"><div class="box"><b>翻牌</b>　<span class="hint">請點選一張牌（翻牌後才能結束回合）</span><div class="cg">${cardCells(true)}</div><div style="margin-top:6px;font-size:12px">橫向連線（同一排）每多一張，獎金多 100</div></div></div>`;
   if(!can&&!CARD_OPEN)return `<div style="margin-top:8px"><button class="nw" onclick="toggleCards()">查看翻牌區</button></div>`;
@@ -283,20 +340,25 @@ function cardBox(){
 /* ---------- 股市折線圖（地圖上半區空白處）與持有數（地圖下半區空白處）：直接畫在地圖 SVG 裡，跟著地圖縮放，不會壓到格子 ---------- */
 // 空白區：x 在「第二欄左緣 ~ 倒數第二欄右緣」之間；y 夾在外圈上下列與中線格之間（外圈左右兩欄與兩個岔路斜線都不會碰到）
 const PNL=(()=>{const x0=cx({x:-2})-W/2+4,x1=cx({x:2})+W/2-4;return{top:{x:x0,y:cy({y:3})+H/2+8,w:x1-x0,h:(cy({y:0})-H/2-12)-(cy({y:3})+H/2+8)},bot:{x:x0,y:cy({y:0})+H/2+12,w:x1-x0,h:(cy({y:-3})-H/2-8)-(cy({y:0})+H/2+12)}};})();
+let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
+const rOn=r=>RSHOW[r]!==false;
+const toggleR=r=>{if(rOn(r)&&RK.filter(rOn).length<=1)return;RSHOW[r]=!rOn(r);render();};
+const allR=()=>{RSHOW={};render();};
 const RCOL={africa:'#c98a00',oceania:'#1e88e5',asia:'#e53935',america:'#2e9d4f',europe:'#8e44ad'};
 const panelBg=(p,title)=>`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="8" fill="var(--panel)" stroke="var(--bd)" stroke-width="1.5" opacity=".96"/><text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">${title}</text>`;
 function stockChartSvg(p){
   const all=(shist||[]).slice(-40).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
-  const L=p.x+36,Rr=p.x+p.w-156,Tp=p.y+26,Bt=p.y+p.h-22,vals=all.flatMap(x=>RK.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
+  const L=p.x+36,Rr=p.x+p.w-156,Tp=p.y+26,Bt=p.y+p.h-22,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
   const X=k=>n<2?L:L+(Rr-L)*k/(n-1),Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1));
   let g=panelBg(p,'股價走勢（每位玩家結束回合記錄一點）');
   for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="11" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
   const step=Math.max(1,Math.ceil((n-1)/8));
   for(let k=0;k<n;k++)if(k%step===0||k===n-1)g+=`<text x="${X(k)}" y="${p.y+p.h-7}" font-size="11" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
-  g+=RK.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
+  g+=vis.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
   const prev=n>=2?all[n-2]:stock;
-  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,y=p.y+40+k*28,x=p.x+p.w-146;
-    return `<rect x="${x}" y="${y-9}" width="10" height="10" rx="5" fill="${RCOL[r]}"/><text x="${x+15}" y="${y}" font-size="12" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="10"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+15}" y="${y+12}" font-size="10" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text>`;}).join('');
+  g+=`<text class="nw" onclick="allR()" x="${p.x+p.w-10}" y="${p.y+16}" font-size="11" text-anchor="end" fill="var(--accent)" style="cursor:pointer">全部顯示</text><text x="${p.x+p.w-146}" y="${p.y+30}" font-size="10" fill="var(--fg)" opacity=".6">點區域名稱可顯示／隱藏</text>`;
+  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,y=p.y+46+k*28,x=p.x+p.w-146,on=rOn(r);
+    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x-4}" y="${y-13}" width="142" height="26" rx="5" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><rect x="${x}" y="${y-9}" width="10" height="10" rx="5" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="2"/><text x="${x+15}" y="${y}" font-size="12" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="10"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+15}" y="${y+10}" font-size="10" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text></g>`;}).join('');
   return g;
 }
 function holdSvg(p,trading){
@@ -625,6 +687,6 @@ function render(){
     <button onclick="reset()">重來</button></div>`;
   $('#sd').innerHTML=head+(phase==='over'?histChart():'')+pls+stk+`<div class="lrow"><div class="box" id="log">${logs.join('<br>')}</div><div class="box" id="mini">${miniSvg()}</div></div>`;
   mfxPlay();
-  $('#md').innerHTML=alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
+  $('#md').innerHTML=cardShow?cardModal():alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
 }
 const CARDS=buildCards();

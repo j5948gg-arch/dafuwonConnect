@@ -1,12 +1,12 @@
 // 伺服器專用，不會傳給瀏覽器。與 engine.js 在同一個環境內執行。
-const MODAL_FN = { offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
+const MODAL_FN = { card: ['cardOk'], offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
 const ALL_MODAL_FN = [].concat(...Object.values(MODAL_FN));
 
 // 玩家送來的動作先在這裡驗證，再呼叫引擎函式
 function safeAct(fn, a, ex) {
   if (phase === 'over' || !Array.isArray(a)) return;
   const int = (v) => Number.isInteger(v), reg = (r) => RK.includes(r);
-  const m = offer ? 'offer' : ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
+  const m = cardShow ? 'card' : offer ? 'offer' : ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
   if (m ? !MODAL_FN[m].includes(fn) : ALL_MODAL_FN.includes(fn)) return;
   const who = ex && ex.who;   // 由伺服器填入的座位編號（不是玩家自己送的）
   if (fn === 'offerAccept' || fn === 'offerDecline') { if (!offer || who !== offer.to) return; }
@@ -18,6 +18,7 @@ function safeAct(fn, a, ex) {
     case 'buyLand': return buyLand();
     case 'buyout': return buyout();
     case 'upgradeAt': return int(a[0]) && T[a[0]] && upgradeAt(a[0]);
+    case 'cardOk': return cardOk();
     case 'endTurn': return phase === 'act' && endTurn();
     case 'flipAt': return int(a[0]) && a[0] >= 0 && a[0] < 49 && flipAt(a[0]);
     case 'askPick': return int(a[0]) && ask.opts[a[0]] && askPick(a[0]);
@@ -47,6 +48,7 @@ function safeAct(fn, a, ex) {
 function aiStep() {
   if (phase === 'over' || busy) return;
   if (offer) return offer.from === turn ? offerCancel() : undefined; // 代打中的玩家有交易還沒結案：取消
+  if (cardShow) return cardOk();   // AI（或代打）直接確認翻到的牌
   const i = turn, p = P[i], t = T[p.pos], pick1 = (a) => a[Math.random() * a.length | 0];
   if (alloc) return allocOk();
   if (ask) return askPick(Math.random() * ask.opts.length | 0);
