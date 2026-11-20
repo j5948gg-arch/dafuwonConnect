@@ -6,7 +6,7 @@ const PIC_COUNT = 12, COLOR_COUNT = 8;
 // 圖片每次都從磁碟讀取（換圖後不必重啟伺服器），並用 ETag 讓瀏覽器每次先確認有沒有更新
 const img = (n) => { const b = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')); return { b, tag: '"' + require('crypto').createHash('md5').update(b).digest('hex') + '"' }; };
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,chest,roundNo})';
 const NONE = JSON.stringify({ t: 'none' });
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));
@@ -25,7 +25,7 @@ const ev = (r, code) => vm.runInContext(code, r.ctx);
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
   const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, pic: s.pic, color: s.color, away: !!s.away, online: s.ai || !!s.ws }));
-  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
+  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, rules: r.rules || { r1: false, r2: false }, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
 }
 function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
 
@@ -146,6 +146,7 @@ function handle(ws, m) {
       if (r.seats.some((x) => x !== me && x.color === k)) return err('這個顏色已被其他玩家選走了');
       me.color = k; break;
     }
+    case 'rules': if (host && !r.started) r.rules = { r1: !!m.r1, r2: !!m.r2 }; break;
     case 'resume':
       if (!r.started || !me.away) return;
       me.away = false; r.lastAI = Date.now() + 1200;   // 給玩家一點反應時間，避免 AI 搶著出手
@@ -156,7 +157,7 @@ function handle(ws, m) {
       if (!host || r.started) return;
       if (r.seats.length < 4) return err('需要滿 4 人才能開始（可用 AI 補滿）');
       r.seats.sort(() => Math.random() - 0.5); // 隨機決定順序
-      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); ev(r, 'PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
+      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); r.ctx.__r = JSON.stringify(r.rules || { r1: false, r2: false }); ev(r, 'RULES=JSON.parse(__r);PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
       r.started = true; r.lastAI = Date.now();
       return sync(r, true);
     case 'rematch':
