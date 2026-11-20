@@ -1,13 +1,16 @@
 const http = require('http'), fs = require('fs'), path = require('path'), vm = require('vm');
 const { WebSocketServer } = require('ws');
 const rd = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
-const SRC = ['map.js', 'engine.js', 'ai.js'].map(rd);
+const SRC_FILES = ['map.js', 'engine.js', 'ai.js'];   // 每開一局新遊戲就重新讀檔：改了 engine.js／ai.js／map.js 不必重啟伺服器
 const PIC_COUNT = 12, COLOR_COUNT = 8;
 // 圖片每次都從磁碟讀取（換圖後不必重啟伺服器），並用 ETag 讓瀏覽器每次先確認有沒有更新
 const img = (n) => { const b = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')); return { b, tag: '"' + require('crypto').createHash('md5').update(b).digest('hex') + '"' }; };
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,chest,roundNo})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,chest,skull,roundNo})';
 const NONE = JSON.stringify({ t: 'none' });
+// 特殊規則：每項獨立開關；「彩池寶箱」必須搭配「土地稅與彩池」
+const RULE_KEYS = ['div', 'fee', 'imp', 'kline', 'tax', 'chest', 'skull'];
+const cleanRules = (x) => { const o = {}; RULE_KEYS.forEach((k) => (o[k] = !!(x && x[k]))); if (!o.tax) o.chest = false; return o; };
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));
 
@@ -16,7 +19,7 @@ function newEngine() {
   const safeTimeout = (f, ms) => setTimeout(() => { try { f(); } catch (e) { console.error(e); } }, ms);
   const ctx = vm.createContext({ setTimeout: safeTimeout, document: { querySelector: () => ({}) } });
   vm.runInContext('var window=this;', ctx);
-  SRC.forEach((s) => vm.runInContext(s, ctx));
+  SRC_FILES.map(rd).forEach((s) => vm.runInContext(s, ctx));
   vm.runInContext('render=function(){};', ctx);
   return ctx;
 }
@@ -25,7 +28,7 @@ const ev = (r, code) => vm.runInContext(code, r.ctx);
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
   const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, pic: s.pic, color: s.color, away: !!s.away, online: s.ai || !!s.ws }));
-  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, rules: r.rules || { r1: false, r2: false }, seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
+  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, rules: cleanRules(r.rules), seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
 }
 function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
 
@@ -146,7 +149,7 @@ function handle(ws, m) {
       if (r.seats.some((x) => x !== me && x.color === k)) return err('這個顏色已被其他玩家選走了');
       me.color = k; break;
     }
-    case 'rules': if (host && !r.started) r.rules = { r1: !!m.r1, r2: !!m.r2 }; break;
+    case 'rules': if (host && !r.started) r.rules = cleanRules(m.rules); break;
     case 'resume':
       if (!r.started || !me.away) return;
       me.away = false; r.lastAI = Date.now() + 1200;   // 給玩家一點反應時間，避免 AI 搶著出手
@@ -157,7 +160,7 @@ function handle(ws, m) {
       if (!host || r.started) return;
       if (r.seats.length < 4) return err('需要滿 4 人才能開始（可用 AI 補滿）');
       r.seats.sort(() => Math.random() - 0.5); // 隨機決定順序
-      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); r.ctx.__r = JSON.stringify(r.rules || { r1: false, r2: false }); ev(r, 'RULES=JSON.parse(__r);PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
+      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); r.ctx.__r = JSON.stringify(cleanRules(r.rules)); ev(r, 'RULES=JSON.parse(__r);PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
       r.started = true; r.lastAI = Date.now();
       return sync(r, true);
     case 'rematch':

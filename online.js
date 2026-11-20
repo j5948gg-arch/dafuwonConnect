@@ -1,5 +1,5 @@
 // 瀏覽器端：畫面沿用 engine.js 的 render()，狀態由伺服器推送，動作送回伺服器執行。
-let ws, ROOM = null, SEATS = [], HOST = 0, STARTED = false, DRAW = null, LRULES = { r1: false, r2: false };
+let ws, ROOM = null, SEATS = [], HOST = 0, STARTED = false, DRAW = null, LRULES = {};
 const token = localStorage.wm_token || (localStorage.wm_token = Math.random().toString(36).slice(2) + Date.now().toString(36));
 const tx = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ token, ...o }));
 const rpc = (fn, ...args) => tx({ t: 'act', fn, args });
@@ -16,8 +16,9 @@ sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnoug
 closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
+const setRule = (k, v) => tx({ t: 'rules', rules: { ...LRULES, [k]: v } });
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, chest, roundNo } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, chest, skull, roundNo } = s);
 }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
@@ -29,7 +30,7 @@ function connect() {
     if (m.t === 'notice') return toast(m.msg);
     if (m.t === 'none') { ROOM = null; STARTED = false; DRAW = null; return view(); }
     DRAW = m.draw || null;
-    ROOM = m.code; SEATS = m.seats; HOST = m.host; ME = m.you; STARTED = m.started; LRULES = m.rules || { r1: false, r2: false };
+    ROOM = m.code; SEATS = m.seats; HOST = m.host; ME = m.you; STARTED = m.started; LRULES = m.rules || {};
     NAMES = m.seats.map((s) => s.name); AWAY = m.seats.map((s) => !!s.away); PIC = m.seats.map((s) => s.pic);
     C = m.seats.map((s) => MAP.PALETTE[s.color].c);
     if (m.s) applyState(m.s);
@@ -59,9 +60,12 @@ function lobbyHtml() {
     ? `<button onclick="tx({t:'ai'})" ${full ? 'disabled' : ''}>加入 1 個 AI</button><button onclick="tx({t:'aipro'})" ${full ? 'disabled' : ''}>加入高階 AI</button><button onclick="tx({t:'fillai'})" ${full ? 'disabled' : ''}>補滿 AI</button><button onclick="tx({t:'rmai'})">移除 AI</button><br>
        <button class="big" onclick="tx({t:'start'})" ${full ? '' : 'disabled'}>開始遊戲</button>${full ? '' : '<div style="font-size:12px">需滿 4 人才能開始，不足的位置可用 AI 補滿</div>'}`
     : '<div class="hint">等待房主開始遊戲…</div>';
-  const rulesBox = `<div class="box"><b>特殊規則</b>${isHost ? '（房主可勾選，可同時選擇）' : '（由房主決定）'}<br>
-    <label><input type="checkbox" ${LRULES.r1 ? 'checked' : ''} ${isHost ? '' : 'disabled'} onchange="tx({t:'rules',r1:this.checked,r2:${!!LRULES.r2}})"> <b>特殊規則一：股市進階</b></label><div style="font-size:12px;margin:0 0 6px 22px">過路費 30% 依該區持股配息；買賣收 0.3% 手續費、賣出另收 0.3% 證交稅；買賣越多價格衝擊越大；股價圖改為 K 線（開高低收＋成交量、MA5／MA10、加權指數）。</div>
-    <label><input type="checkbox" ${LRULES.r2 ? 'checked' : ''} ${isHost ? '' : 'disabled'} onchange="tx({t:'rules',r1:${!!LRULES.r1},r2:this.checked})"> <b>特殊規則二：土地稅與彩池</b></label><div style="font-size:12px;margin:0 0 0 22px">每輪結束，依各人土地過路費的 10% 課稅進彩池；彩池以寶箱出現在隨機空格，每輪換位置，停在寶箱格即可領取（扣 20% 所得稅併入下一個彩池）。</div></div>`;
+  const rulesBox = `<div class="box"><b>特殊規則</b>${isHost ? '（房主可勾選；每一項都獨立，可任意組合）' : '（由房主決定）'}`
+    + ['股市', '土地', '事件'].map((g) => `<div style="margin-top:6px;font-weight:700;font-size:12px;opacity:.7">${g}</div>`
+      + RULE_DEFS.filter((d) => d.grp === g).map((d) => {
+        const dis = !isHost || (d.need && !LRULES[d.need]);
+        return `<label><input type="checkbox" ${LRULES[d.k] ? 'checked' : ''} ${dis ? 'disabled' : ''} onchange="setRule('${d.k}',this.checked)"> <b>${d.name}</b></label><div style="font-size:12px;margin:0 0 4px 22px">${d.desc}</div>`;
+      }).join('')).join('') + `</div>`;
   return `<div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${rulesBox}${cpick}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button>`;
 }
 function mk(t) {
