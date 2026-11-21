@@ -364,10 +364,9 @@ function klineSvg(p){
   // 選擇要看哪一檔
   KSER.slice().reverse().forEach((k,j)=>{const x=p.x+p.w-8-(j+1)*44+4,on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${p.y+4}" width="40" height="17" rx="8" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.2"/><text x="${x+20}" y="${p.y+16}" font-size="11" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
   if(!n)return g+`<text x="${p.x+p.w/2}" y="${p.y+p.h/2}" text-anchor="middle" font-size="13" fill="var(--fg)">尚無資料</text>`;
-  const cl=full.map(x=>x[3]),ma=k=>full.map((_,j)=>j+1>=k?cl.slice(j+1-k,j+1).reduce((a,b)=>a+b,0)/k:null);
-  const m5=ma(5).slice(off),m10=ma(10).slice(off),cs=full.slice(off);
+  const cur=kc?kNow()[si]:null,cs=full.slice(off).map((c,j,a)=>j===a.length-1&&cur!=null?[c[0],Math.max(c[1],cur),Math.min(c[2],cur),cur,c[4]]:c);   // 最後一根＝進行中的這一輪，收盤即時＝現在的價格
   const L=p.x+44,Rr=p.x+p.w-10,Tp=p.y+28,Bt=p.y+118,Vt=p.y+126,Vb=p.y+158,step=(Rr-L)/N,bw=Math.max(4,step*.58);
-  const lo0=Math.min(...cs.map(c=>c[2]),...m5.concat(m10).filter(v=>v!=null)),hi0=Math.max(...cs.map(c=>c[1]),...m5.concat(m10).filter(v=>v!=null)),pad=Math.max(isI?1:2,(hi0-lo0)*.08),lo=lo0-pad,hi=hi0+pad;
+  const lo0=Math.min(...cs.map(c=>c[2])),hi0=Math.max(...cs.map(c=>c[1])),pad=Math.max(isI?1:2,(hi0-lo0)*.08),lo=lo0-pad,hi=hi0+pad;
   const Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1)),vmax=Math.max(1,...cs.map(c=>c[4])),X=j=>L+step*(j+.5);
   for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--fg)">${fm(v)}</text>`;}
   g+=`<line x1="${L}" x2="${Rr}" y1="${Vb}" y2="${Vb}" stroke="var(--line)"/><text x="${L-4}" y="${Vb}" font-size="10" text-anchor="end" fill="var(--fg)">量</text>`;
@@ -377,11 +376,13 @@ function klineSvg(p){
     const vh=(Vb-Vt)*c[4]/vmax;if(vh>0)g+=`<rect x="${x-bw/2}" y="${Vb-vh}" width="${bw}" height="${vh}" fill="${col}" opacity=".55"/>`;
     const rn=off+j+1;if(j%4===0||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-6}" font-size="10" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
   });
-  const line=(arr,col)=>{const pts=arr.map((v,j)=>v==null?null:X(j).toFixed(1)+','+Y(v).toFixed(1)).filter(Boolean);return pts.length>1?`<polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round"/>`:'';};
-  g+=line(m5,'#f59e0b')+line(m10,'#3b82f6');
-  const last=cs[cs.length-1],v5=m5[m5.length-1],v10=m10[m10.length-1];
+  // 白色即時價格走向線：連起每根 K 棒的收盤價，最右端就是現在的價格（下方加一層深色描邊，淺色背景上也看得到）
+  const wl=cs.map((c,j)=>X(j).toFixed(1)+','+Y(c[3]).toFixed(1)).join(' ');
+  if(cs.length>1)g+=`<polyline points="${wl}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="4.4" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${wl}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const last=cs[cs.length-1];
+  g+=`<circle cx="${X(cs.length-1)}" cy="${Y(last[3])}" r="4" fill="#fff" stroke="#000" stroke-opacity=".55" stroke-width="1.5"/>`;
   g+=`<text x="${L+4}" y="${Tp+10}" font-size="10" fill="var(--fg)">開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
-  g+=`<text x="${Rr-4}" y="${Tp+10}" font-size="10" text-anchor="end"><tspan fill="#f59e0b">MA5 ${v5==null?'—':fm(v5)}</tspan><tspan fill="var(--fg)">　</tspan><tspan fill="#3b82f6">MA10 ${v10==null?'—':fm(v10)}</tspan></text>`;
+  g+=`<line x1="${Rr-96}" x2="${Rr-80}" y1="${Tp+7}" y2="${Tp+7}" stroke="#000" stroke-opacity=".35" stroke-width="4.4" stroke-linecap="round"/><line x1="${Rr-96}" x2="${Rr-80}" y1="${Tp+7}" y2="${Tp+7}" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><text x="${Rr-4}" y="${Tp+10}" font-size="10" text-anchor="end" fill="var(--fg)">即時 ${fm(last[3])}</text>`;
   return g;
 }
 function chestSvg(){
@@ -551,9 +552,9 @@ const RULE_DEFS=[
   {k:'div',grp:'股市',name:'配息',desc:'過路費的 30% 依該區持股比例分給所有持股人。'},
   {k:'fee',grp:'股市',name:'手續費與證交稅',desc:'買賣各收 0.3% 手續費，賣出另收 0.3% 證交稅。'},
   {k:'imp',grp:'股市',name:'價格衝擊',desc:'買越多股價推得越高、賣越多跌得越深（超線性），並依實際成交均價計價。'},
-  {k:'kline',grp:'股市',name:'K 線圖',desc:'股價走勢改為 K 線（開高低收＋成交量、MA5／MA10、加權指數）；下方表格仍顯示各區股價與本輪漲跌多少。'},
+  {k:'kline',grp:'股市',name:'K 線圖',desc:'股價走勢改為 K 線（開高低收＋成交量、加權指數），另有一條白線顯示即時價格走向；下方表格仍顯示各區股價與本輪漲跌多少。'},
   {k:'tax',grp:'土地',name:'土地稅與彩池',desc:'每輪結束，依各人土地過路費合計的 10% 課稅，進入彩池。'},
-  {k:'chest',grp:'土地',name:'彩池寶箱',need:'tax',desc:'彩池以寶箱出現在隨機空格，每輪換位置，停在那格即可領取（扣 20% 所得稅併入下一個彩池），領走後該格所在地區股價 −10%。需先開啟「土地稅與彩池」。'},
+  {k:'chest',grp:'土地',name:'彩池寶箱',need:'tax',desc:'彩池以寶箱出現在隨機空格，停在那格即可領取（扣 20% 所得稅併入下一個彩池）。寶箱只在被領走後才換位置；領走後該格所在地區股價 −10%。需先開啟「土地稅與彩池」。'},
   {k:'skull',grp:'事件',name:'骷髏',desc:'骷髏出現在隨機空格；停在那格，該格所在地區股價 −20%，之後骷髏換到別格。白格（起點、股市、黃寶石，不屬於任何地區）沒有效果，只會換位置。'},
 ];
 const tileTag=id=>nm(id)+(nm(id)==='股市'?(T[id].y>0?'（上方）':'（下方）'):'');   // 兩個股市同名：標示上方／下方
@@ -624,6 +625,7 @@ function claimChest(i){
   pot=tx;chest=-1;
   if(rg){const o=stock[rg];bump(rg,-CHEST_DROP);log(`📉 寶箱所在的${RN(rg)}股價下降 ${CHEST_DROP*100}%（${o}→${stock[rg]}）`);}
   else log('這格不屬於任何地區，股價不變');
+  moveChest();   // 被領走後，立刻換到新的位置
 }
 function moveSkull(){
   if(!RULES.skull)return;
@@ -646,7 +648,8 @@ function skullSvg(){
 function roundEnd(){
   inRound=true;
   if(RULES.tax)landTax();
-  if(phase!=='over'){if(RULES.kline)kClose();roundNo++;if(RULES.chest)moveChest();}
+  if(phase!=='over'){if(RULES.kline)kClose();roundNo++;if(RULES.chest&&chest<0)moveChest();   // 寶箱不會每輪換位置：沒有寶箱時才放一個
+  }
   inRound=false;
 }
 function trade(r,sign){
