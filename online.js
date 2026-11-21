@@ -67,7 +67,8 @@ function lobbyHtml() {
         const dis = !isHost || (d.need && !LRULES[d.need]);
         return `<label><input type="checkbox" ${LRULES[d.k] ? 'checked' : ''} ${dis ? 'disabled' : ''} onchange="setRule('${d.k}',this.checked)"> <b>${d.name}</b></label><div style="font-size:12px;margin:0 0 4px 22px">${d.desc}</div>`;
       }).join('')).join('') + `</div>`;
-  return `<div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${rulesBox}${cpick}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button>`;
+  // 左欄：房號、座位、選代表色與棋子、開始／離開；右欄：特殊規則（寬螢幕並排，不必往下捲才選得到角色；窄螢幕自動換行）
+  return `<div class="lobwrap"><div class="lobl"><div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${cpick}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button></div><div class="lobr">${rulesBox}</div></div>`;
 }
 function mk(t) {
   const name = $('#nm').value.trim(); if (!name) return alert('請輸入 ID');
