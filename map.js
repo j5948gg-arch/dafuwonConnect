@@ -41,6 +41,23 @@
   ];
 
   const TILES = [START, ...RING, ...CENTER.filter((t) => t !== START)].map((t, id) => ({ id, ...t }));
+  // ---- 台灣地名版：就地改地區名稱與土地名稱（依各區土地在地圖定義中的順序對應）----
+  const TW = {
+    regions: { africa: '台北市', oceania: '新北市', asia: '台南', america: '高雄市', europe: '台中' },
+    lands: {
+      africa:  ['士林區', '大安區', '萬華區', '信義區'],
+      america: ['左營區', '鼓山區', '苓雅區', '旗津區'],
+      asia:    ['白河區', '安平區', '永康區', '玉井區'],
+      europe:  ['北屯區', '西屯區', '沙鹿區', '清水區'],
+      oceania: ['板橋區', '淡水區', '土城區', '新店區'],
+    },
+  };
+  const ORIG = { regions: Object.fromEntries(Object.keys(REGIONS).map((r) => [r, REGIONS[r].name])), tiles: TILES.map((t) => t.name) };
+  function setLocale(tw) {
+    Object.keys(REGIONS).forEach((r) => (REGIONS[r].name = tw ? TW.regions[r] : ORIG.regions[r]));
+    const cnt = {};
+    TILES.forEach((t) => { if (t.type === 'land') { const k = (cnt[t.region] = (cnt[t.region] || 0) + 1) - 1; t.name = tw ? TW.lands[t.region][k] : ORIG.tiles[t.id]; } });
+  }
   const key = (x, y) => x + ',' + y;
   const BY = {};
   TILES.forEach((t) => (BY[key(t.x, t.y)] = t.id));
@@ -98,7 +115,7 @@
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.05, buyout: 0.02, toll: 0.02, perShare: 0.0005 };
 
-  const MAP = { REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
+  const MAP = { setLocale, TW, REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
   if (typeof module !== 'undefined') module.exports = MAP;
   else window.MAP = MAP;
 })();

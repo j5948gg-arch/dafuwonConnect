@@ -125,8 +125,8 @@ function proWeight(i, path) {
       if (assets(i) >= MAP.WIN_ASSETS) gain += 1e6;                                  // 經過或停在起點就能獲勝
       if (MAP.GEM_KEYS.every((g) => gems[g])) gain += 8000;
     }
+    if (RULES.chest && id === chest && pot > 0) gain += Math.round(pot * (k === path.length - 1 ? CHEST_STOP : CHEST_PASS));   // 寶箱：經過領 30%、停下領 80%
     if (k !== path.length - 1) return;
-    if (RULES.chest && id === chest && pot > 0) gain += Math.round(pot * 0.8);                       // 寶箱：停下就能領彩池
     if (RULES.skull && id === skull) { const rg = chestRegion(id); if (rg) cost += SKULL_DROP * p.st[rg] * stock[rg]; }   // 骷髏：自己在該區的持股會縮水
     if (t.type === 'start') gain += 1500;
     else if (t.type === 'stock') gain += proNew(i) ? Math.min(STOCK_EDGE >= 30000 ? 30000 : 3500, 400 + STOCK_EDGE) : (p.cash > 15000 ? 1200 : 400);

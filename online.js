@@ -19,6 +19,7 @@ confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 const setRule = (k, v) => tx({ t: 'rules', rules: { ...LRULES, [k]: v } });
 function applyState(s) {
   ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, chest, skull, roundNo } = s);
+  applyLocale();   // 台灣地名版：依伺服器的規則切換地名
 }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
@@ -61,7 +62,7 @@ function lobbyHtml() {
        <button class="big" onclick="tx({t:'start'})" ${full ? '' : 'disabled'}>開始遊戲</button>${full ? '' : '<div style="font-size:12px">需滿 4 人才能開始，不足的位置可用 AI 補滿</div>'}`
     : '<div class="hint">等待房主開始遊戲…</div>';
   const rulesBox = `<div class="box"><b>特殊規則</b>${isHost ? '（房主可勾選；每一項都獨立，可任意組合）' : '（由房主決定）'}`
-    + ['股市', '土地', '事件'].map((g) => `<div style="margin-top:6px;font-weight:700;font-size:12px;opacity:.7">${g}</div>`
+    + [...new Set(RULE_DEFS.map((d) => d.grp))].map((g) => `<div style="margin-top:6px;font-weight:700;font-size:12px;opacity:.7">${g}</div>`
       + RULE_DEFS.filter((d) => d.grp === g).map((d) => {
         const dis = !isHost || (d.need && !LRULES[d.need]);
         return `<label><input type="checkbox" ${LRULES[d.k] ? 'checked' : ''} ${dis ? 'disabled' : ''} onchange="setRule('${d.k}',this.checked)"> <b>${d.name}</b></label><div style="font-size:12px;margin:0 0 4px 22px">${d.desc}</div>`;

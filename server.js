@@ -9,7 +9,7 @@ const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/ja
 const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,chest,skull,roundNo})';
 const NONE = JSON.stringify({ t: 'none' });
 // 特殊規則：每項獨立開關；「彩池寶箱」必須搭配「土地稅與彩池」
-const RULE_KEYS = ['div', 'fee', 'imp', 'kline', 'tax', 'chest', 'skull'];
+const RULE_KEYS = ['tw', 'div', 'fee', 'imp', 'kline', 'tax', 'chest', 'skull'];
 const cleanRules = (x) => { const o = {}; RULE_KEYS.forEach((k) => (o[k] = !!(x && x[k]))); if (!o.tax) o.chest = false; return o; };
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));

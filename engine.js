@@ -3,7 +3,7 @@ const picUrl=i=>`/img/p${PIC[i]!==undefined?PIC[i]:i}.png?v=${MAP.PIC_VER}`;cons
 let extraOn=false,pendingTrade=false,resumeMove=false;
 let mfx=[],mfxSeq=0,MFX_SEEN=null; // 玩家間金錢異動（動畫用）：{id,i,a}
 let mono={},monoLvDone={};   // 各區目前的獨佔者、是否已發過升級獎勵
-let offer=null,offerN=0,tradeUI=null,hist=[],shist=[],cardShow=null,RULES={div:0,fee:0,imp:0,kline:0,tax:0,chest:0,skull:0},kl=[],kc=null,pot=0,chest=-1,skull=-1,roundNo=1,inRound=false;   // cardShow：翻開、等玩家按確認才執行的牌 {s,c,by,n,a,b}
+let offer=null,offerN=0,tradeUI=null,hist=[],shist=[],cardShow=null,RULES={tw:0,div:0,fee:0,imp:0,kline:0,tax:0,chest:0,skull:0},kl=[],kc=null,pot=0,chest=-1,skull=-1,roundNo=1,inRound=false;   // cardShow：翻開、等玩家按確認才執行的牌 {s,c,by,n,a,b}
    // 玩家間交易、每回合總資產紀錄
 const histNow=()=>P.map((_,i)=>assets(i));
 const mfxAdd=(i,a)=>{if(!a)return;mfx.push({id:++mfxSeq,i,a});if(mfx.length>8)mfx.shift();};
@@ -22,6 +22,7 @@ const START_CASH=40000, MAXH=999, MAXT=99, money=n=>n.toLocaleString('en-US');
 let P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,turn,phase,left,dice,rollSeq=0,first,choices,busy,logs,need,qty,np=2,force='0';
 
 function reset(){
+  applyLocale();
   P=Array.from({length:np},()=>({pos:0,prev:null,cash:START_CASH,alive:true,gems:{},level:1,st:Object.fromEntries(RK.map(r=>[r,0]))}));
   owner={};lv={};inv={};mono={};monoLvDone={};winner=-1;chg=Object.fromEntries(RK.map(r=>[r,0]));stock=Object.fromEntries(RK.map(r=>[r,150+(Math.random()*151|0)]));
   qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;cardShow=null;upUsed=0;upIds=[];flipUsed=false;justBought=-1;lastCard='';newDeck();
@@ -56,6 +57,7 @@ function step(){
 function go(to){
   const p=P[turn],tt=T[to];
   choices=null;p.prev=p.pos;p.pos=to;left--;first=false;
+  if(left>0)claimChest(turn,true);   // 寶箱：「經過」（還沒走完）領 30%
   if(tt.type==='gem'&&!p.gems[tt.gem]){p.gems[tt.gem]=1;log(`${pn(turn)} 獲得${MAP.GEMS[tt.gem].name}`);}
   if(tt.type==='start'&&passStart(turn))return;
   if(pendingTrade){pendingTrade=false;extraOn=true;traded={};resumeMove=true;render();return;}
@@ -546,15 +548,17 @@ function openTrade(){extraOn=true;traded={};resumeMove=false;log(`${pn(turn)} �
 function closeExtra(){if(!extraOn)return;extraOn=false;if(resumeMove){resumeMove=false;step();return;}render();}
 
 /* ---------- 特殊規則一：配息、手續費與價格衝擊、K 線 ／ 特殊規則二：土地稅與彩池寶箱 ---------- */
-const FEE=0.003,TAX=0.003,BUY_K=30,SELL_K=15,DIV=0.3,LTAX=0.1,PRIZE_TAX=0.2,CHEST_DROP=0.1,SKULL_DROP=0.2;   // CHEST_DROP：寶箱被領走時，寶箱所在地區的股價跌幅
+const FEE=0.003,TAX=0.003,BUY_K=30,SELL_K=15,DIV=0.3,LTAX=0.03,CHEST_STOP=0.8,CHEST_PASS=0.3,CHEST_DROP=0.1,SKULL_DROP=0.2;   // CHEST_DROP：寶箱被領走時，寶箱所在地區的股價跌幅
 // 特殊規則：每一項都能單獨開關（need：必須先開啟的規則）
+const applyLocale=()=>MAP.setLocale(!!RULES.tw);   // 台灣地名版：切換地區與土地名稱
 const RULE_DEFS=[
+  {k:'tw',grp:'版本',name:'台灣地名版',desc:'五大區改為台北市、新北市、台南、高雄市、台中，土地改為各區名稱（士林區、板橋區…），股票也一併更名。'},
   {k:'div',grp:'股市',name:'配息',desc:'過路費的 30% 依該區持股比例分給所有持股人。'},
   {k:'fee',grp:'股市',name:'手續費與證交稅',desc:'買賣各收 0.3% 手續費，賣出另收 0.3% 證交稅。'},
   {k:'imp',grp:'股市',name:'價格衝擊',desc:'買越多股價推得越高、賣越多跌得越深（超線性），並依實際成交均價計價。'},
   {k:'kline',grp:'股市',name:'K 線圖',desc:'股價走勢改為 K 線（開高低收＋成交量、加權指數），另有一條白線顯示即時價格走向；下方表格仍顯示各區股價與本輪漲跌多少。'},
-  {k:'tax',grp:'土地',name:'土地稅與彩池',desc:'每輪結束，依各人土地過路費合計的 10% 課稅，進入彩池。'},
-  {k:'chest',grp:'土地',name:'彩池寶箱',need:'tax',desc:'彩池以寶箱出現在隨機空格，停在那格即可領取（扣 20% 所得稅併入下一個彩池）。寶箱只在被領走後才換位置；領走後該格所在地區股價 −10%。需先開啟「土地稅與彩池」。'},
+  {k:'tax',grp:'土地',name:'土地稅與彩池',desc:'每輪結束，依各人土地過路費合計的 3% 課稅，進入彩池。'},
+  {k:'chest',grp:'土地',name:'彩池寶箱',need:'tax',desc:'彩池以寶箱出現在隨機空格；經過寶箱可領彩池的 30%、停在寶箱上可領 80%（剩下的留在彩池）。任一種領取後，寶箱立刻換位置，且該格所在地區股價 −10%。需先開啟「土地稅與彩池」。'},
   {k:'skull',grp:'事件',name:'骷髏',desc:'骷髏出現在隨機空格；停在那格，該格所在地區股價 −20%，之後骷髏換到別格。白格（起點、股市、黃寶石，不屬於任何地區）沒有效果，只會換位置。'},
 ];
 const tileTag=id=>nm(id)+(nm(id)==='股市'?(T[id].y>0?'（上方）':'（下方）'):'');   // 兩個股市同名：標示上方／下方
@@ -617,12 +621,12 @@ function moveChest(){
   chest=c.length?rnd(c):-1;
   if(chest>=0){const rg=chestRegion(chest);log(`🧰 彩池 ${money(pot)} 的寶箱出現在 ${tileTag(chest)}${rg?`（${RN(rg)}，被領走時該區股價 −${CHEST_DROP*100}%）`:''}`);}
 }
-function claimChest(i){
+function claimChest(i,pass){   // pass=true：經過寶箱（領彩池 30%）；否則停在寶箱上（領 80%）。領走後寶箱換位置、該區股價下跌
   if(!RULES.chest||chest<0||pot<=0||P[i].pos!==chest)return;
-  const prize=Math.round(pot*(1-PRIZE_TAX)),tx=pot-prize;
-  P[i].cash+=prize;mfxAdd(i,prize);log(`🎉 ${pn(i)} 找到寶箱，獲得彩池 ${money(prize)}（所得稅 ${PRIZE_TAX*100}% = ${money(tx)} 併入下一個彩池）`);
+  const rate=pass?CHEST_PASS:CHEST_STOP,prize=Math.round(pot*rate),rest=pot-prize;
+  P[i].cash+=prize;mfxAdd(i,prize);log(`🎉 ${pn(i)} ${pass?'經過':'停在'}寶箱，獲得彩池的 ${rate*100}%：${money(prize)}（剩下 ${money(rest)} 留在彩池）`);
   const rg=chestRegion(chest);
-  pot=tx;chest=-1;
+  pot=rest;chest=-1;
   if(rg){const o=stock[rg];bump(rg,-CHEST_DROP);log(`📉 寶箱所在的${RN(rg)}股價下降 ${CHEST_DROP*100}%（${o}→${stock[rg]}）`);}
   else log('這格不屬於任何地區，股價不變');
   moveChest();   // 被領走後，立刻換到新的位置
@@ -836,7 +840,7 @@ function render(){
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
   const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><img class="pp" src="${picUrl(i)}" alt="${MAP.PIC_NAMES[PIC[i]]||''}"><b>${pnA(i)}</b>${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${RULES.tax?`<br>每輪土地稅預估 ${money(taxOf(i))}`:''}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}${tradeBtn(i)}</div>`}).join('');
   const stk=`<div class="box"><b>股市</b>${RULE_DEFS.filter(d=>RULES[d.k]).map(d=>` <span class="tag">${d.name}</span>`).join('')}　<span style="font-size:12px">股價走勢與各人持有數在地圖中間；每區每人持股上限 ${MAXH} 股，單次買賣上限 ${MAXT} 股</span>`+
-    (RULES.tax?`<div style="margin-top:4px">🧰 彩池 <b>${money(pot)}</b>（${!RULES.chest?'未開啟「彩池寶箱」，彩池只會累積':chest>=0?'寶箱在 <b>'+tileTag(chest)+'</b>'+(chestRegion(chest)?'（'+RN(chestRegion(chest))+'，被領走時該區股價 −'+CHEST_DROP*100+'%）':'')+'，停在那一格即可領取':pot>0?'下一輪出現':'目前沒有彩池'}）</div>`:'')+
+    (RULES.tax?`<div style="margin-top:4px">🧰 彩池 <b>${money(pot)}</b>（${!RULES.chest?'未開啟「彩池寶箱」，彩池只會累積':chest>=0?'寶箱在 <b>'+tileTag(chest)+'</b>'+(chestRegion(chest)?'（'+RN(chestRegion(chest))+'，被領走時該區股價 −'+CHEST_DROP*100+'%）':'')+'，經過可領 '+CHEST_PASS*100+'%、停下領 '+CHEST_STOP*100+'%':pot>0?'下一輪出現':'目前沒有彩池'}）</div>`:'')+
     (RULES.skull?`<div style="margin-top:4px">💀 骷髏${skull>=0?'在 <b>'+tileTag(skull)+'</b>'+(chestRegion(skull)?'（'+RN(chestRegion(skull))+'，停在那格該區股價 −'+SKULL_DROP*100+'%）':'（白格，沒有效果，只會換位置）'):'暫時沒有位置'}</div>`:'')+
     (trading?'<hr>'+RK.map(r=>traded[r]?`<div>${RN(r)} 🔒 本次已交易，暫時關閉</div>`:`<div>${RN(r)} <span style="background:var(--accent);color:#222;font-weight:700;padding:1px 7px;border-radius:10px">持有 ${P[turn].st[r]}</span> <input type="number" min="1" max="99" value="${qty[r]}" oninput="setQty('${r}',this.value)">
       <button onclick="trade('${r}',1)">買</button><button onclick="trade('${r}',-1)">賣</button><button onclick="qty['${r}']=99;render()">99</button><button onclick="maxBuy('${r}')">最大</button><div style="font-size:12px" id="c_${r}">${costTxt(r)}</div></div>`).join('')+'<div style="font-size:12px">每區每次停留只能交易一次（買或賣擇一）</div>':'')+`</div>`;
