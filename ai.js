@@ -68,7 +68,7 @@ function aiStep() {
   const c = p.cash, own = t.type === 'land' ? owner[t.id] : undefined;
   const v2 = proV2(i), cc = v2 && PH.liq ? proLiquid(i) : c;   // 高階 AI：不留現金，缺錢時賣掉（已被自己拉抬過的）股票來付
   if (t.type === 'land' && own === undefined && (cc >= t.price + 3000 || proKeyLand(i, t))) return buyLand();
-  if (t.type === 'land' && own !== undefined && own !== i && c >= MAP.BUYOUT_MULT * t.price + 15000 && (lv[t.id] || 0) <= MAP.BUYOUT_MAX_LV) return buyout();
+  if (t.type === 'land' && own !== undefined && own !== i && (lv[t.id] || 0) <= MAP.BUYOUT_MAX_LV && (c >= MAP.BUYOUT_MULT * t.price + 15000 || (proX(i) && X3.bo && proBuyoutKey(i, t, cc)))) return buyout();
   if (!upFull()) {
     const stockFirst = v2 && t.type === 'stock' && proPlan(i).length > 0;   // 在股市格有股票可做時，先買賣（買賣後本次就不能升級）
     const pool = t.type === 'start' || (t.type === 'stock' && noTrade() && !stockFirst) || onOwnS() ? lands(i) : t.type === 'land' && own === i && justBought !== t.id ? [t] : [];
@@ -224,7 +224,7 @@ function proPlanV1(i) {                   // 上一版：這回合在股市格�
   }
   return out.filter((x) => x.score >= PRO_P.min).sort((x, y) => y.edge - x.edge);
 }
-const proPlan = (i) => (proV2(i) ? proPlanV2(i) : proPlanV1(i));
+const proPlan = (i) => { const pl = proV2(i) ? proPlanV2(i) : proPlanV1(i); return proX(i) ? proFit(i, pl) : pl; };   // v3：計畫產生後，再依「實際成交報價」微調每筆的股數
 const proEdge = (i) => { const pl = proPlan(i); return pl.some((x) => x.win || x.big) ? 30000 : pl.slice(0, 2).reduce((s, x) => s + x.edge, 0); };
 function proTrade() {                     // 一次一筆（和 aiTrade 一樣），回傳 true 表示這次動作了
   const best = proPlan(turn)[0];
@@ -353,4 +353,87 @@ function proSellPickV2(i) {               // 現金不足被迫賣股：賣掉�
 function proUpPick(i, ok) {               // 升級順序：後期先升「殺手地」，其餘優先主力區、過路費最高的
   const home = homeOf(i, false), L = lands(i).sort((x, y) => tollOf(y) - tollOf(x));
   return ok.slice().sort((x, y) => (proStage(i) === 3 && L[0] ? (y.id === L[0].id) - (x.id === L[0].id) : 0) || ((y.region === home) - (x.region === home)) || tollOf(y) - tollOf(x))[0].id;
+}
+
+
+// ======================= 高階 AI v3：針對「全部特殊規則開啟」的強化 =======================
+// 舊版的缺口：① 完全不考慮手續費／證交稅／價格衝擊的實際成本（只用線性公式估）；② 單筆被 AI_LOT=99 綁死，
+// 但現在人類單次買賣沒有上限，在「價格衝擊」下大量買進會把「自己已持有的股票」一起墊高，持股越多越划算。
+// v3 做法：沿用 v2 的階段／優先順序，但每一筆交易用 buyQuote／sellQuote 的真實報價，在候選股數中挑「帳面淨賺最多」的量：
+//   淨賺 = 我的持股帳面變化（含滑價、手續費、證交稅）− β × 對手（領先者加權）的持股帳面變化 + 配息變化 + 過路費變化 + 原計畫的結構性收益
+// 另外會主動找 v2 沒列入計畫的機會：持股大的區域拉抬、對手持股遠多於我的區域壓價。
+const PRO_X = [];                         // PRO_X[座位] = false → 該座位停用 v3（對照測試用）；預設全部高階 AI 啟用
+const proX = (i) => proV2(i) && PRO_X[i] !== false;
+const X3 = { beta: 0.6, H: 8, tIn: 0.5, tOut: 0.2, oppFrac: 0.5, minObj: 1200, minPct: 0.02, ext: 1, opp: 1, bo: 1, fit: 1 };   // ext/opp/bo/fit：各功能開關（對照測試用）
+const LOT_GRID = [1, 2, 3, 5, 8, 12, 18, 27, 40, 60, 90, 135, 200, 300, 450, 675, 999];
+function proOppW(i, r) {                  // 對手在 r 區的加權持股：領先者（越接近獲勝門檻權重越大）算重一點
+  const opp = oppOf(i), lead = opp.slice().sort((x, y) => assets(y) - assets(x))[0];
+  const u = lead === undefined ? 1 : 1 + PRO_P.urg * Math.max(0, (assets(lead) / MAP.WIN_ASSETS - 0.6) / 0.4);
+  return opp.reduce((s, j) => s + P[j].st[r] * (j === lead ? Math.max(1, u) : 0.5), 0);
+}
+function proTollTerm(i, r, m) {           // 股價變動 m 對「這區所有土地過路費」的預期影響（過路費與股價成正比）
+  let mine = 0, theirs = 0;
+  T.forEach((t) => { if (t.type === 'land' && t.region === r && owner[t.id] !== undefined) { if (owner[t.id] === i) mine += tollOf(t); else theirs += tollOf(t); } });
+  return m * (X3.tIn * mine - X3.tOut * theirs);
+}
+function proDivGain(i, r, q, sign) {      // 配息：持股比例變化 × 這區預期過路費流量的 30%
+  if (!RULES.div) return 0;
+  const al = alive().length, Fr = T.reduce((a, t) => a + (t.type === 'land' && t.region === r && owner[t.id] !== undefined ? tollOf(t) : 0), 0) * Math.max(1, al - 1) / T.length;
+  const my = P[i].st[r], S = P.reduce((a, x) => a + (x.alive ? x.st[r] : 0), 0), q2 = sign * q;
+  const fb = S > 0 ? my / S : 0, fa = (S + q2) > 0 ? (my + q2) / (S + q2) : 0;
+  return X3.H * DIV * Fr * (fa - fb);
+}
+function proObj(i, r, side, q, sc) {      // 這筆交易的帳面淨賺（貨幣單位）；回傳 {obj, cost}
+  const p = P[i], pr = stock[r], my = p.st[r], oh = proOppW(i, r);
+  if (side > 0) {
+    const B = buyQuote(r, q), m = B.m;
+    return { obj: (my + q) * pr * (1 + m) - my * pr - B.total - X3.beta * oh * pr * m + proDivGain(i, r, q, 1) + proTollTerm(i, r, m) + sc * q * pr, cost: B.total };
+  }
+  const S = sellQuote(r, q), m = S.m;
+  return { obj: S.net - q * pr - (my - q) * pr * m + X3.beta * oh * pr * m + proDivGain(i, r, q, -1) - proTollTerm(i, r, m) + sc * q * pr, cost: S.net };
+}
+function proBest(i, r, side, cap, sc, cashB) {   // 在 1..cap 的候選股數中挑帳面淨賺最大的；買入受 cashB 限制
+  const pr = stock[r]; let best = null;
+  const qs = new Set(LOT_GRID.filter((x) => x <= cap)); if (cap >= 1) qs.add(cap);
+  for (const q of qs) {
+    const o = proObj(i, r, side, q, sc);
+    if (side > 0 && o.cost > cashB) continue;
+    if (!best || o.obj > best.obj) best = { q, obj: o.obj, cost: o.cost };
+  }
+  return best;
+}
+function proFit(i, pl) {
+  const p = P[i], resv = proResv(i), cashB = Math.max(0, p.cash - resv), out = [], used = new Set();
+  for (const e of pl) {
+    used.add(e.r);
+    if (e.big && e.side < 0) { out.push(e); continue; }          // 後期為灌目標區而「賣別區籌錢」：維持原量
+    const pr = stock[e.r], my = p.st[e.r];
+    let cap = e.q;
+    if (X3.ext && e.side > 0 && e.prio >= 4) cap = Math.max(e.q, Math.min(MAXH - my, Math.floor(cashB / pr)) * proRisk(i, e.r) | 0);   // 主力區／後期灌盤：可以超過舊版的 99 股
+    if (X3.ext && e.side < 0) cap = Math.max(e.q, my);
+    const f = X3.fit ? proBest(i, e.r, e.side, Math.max(1, cap | 0), e.score, cashB) : { q: e.q, obj: e.edge };
+    if (!f || f.obj <= 0) { if (e.big || e.win) out.push(e); continue; }
+    out.push({ ...e, q: f.q, edge: Math.max(1, f.obj) });
+  }
+  // 主動找機會：v2 沒列入計畫、但帳面淨賺夠大的買進（持股大區拉抬）或賣出（壓低對手持股遠多於我的區域）
+  for (const r of RK) {
+    if (!X3.opp || traded[r] || used.has(r)) continue;
+    const pr = stock[r], my = p.st[r];
+    const capB = Math.min(MAXH - my, Math.floor(cashB * X3.oppFrac / pr)) * proRisk(i, r) | 0;
+    if (capB >= 1 && my > 0) {
+      const f = proBest(i, r, 1, capB, 0, cashB * X3.oppFrac);
+      if (f && f.obj >= Math.max(X3.minObj, X3.minPct * f.cost)) out.push({ r, side: 1, q: f.q, prio: 2.6, score: f.obj / Math.max(1, f.q * pr), edge: f.obj, opp: true });
+    }
+    if (my > 0) {
+      const f = proBest(i, r, -1, my, 0, 0);
+      if (f && f.obj >= Math.max(X3.minObj, X3.minPct * f.cost)) out.push({ r, side: -1, q: f.q, prio: 2.5, score: f.obj / Math.max(1, f.q * pr), edge: f.obj, opp: true });
+    }
+  }
+  return out.sort((x, y) => y.prio - x.prio || y.edge - x.edge);
+}
+// 強制併購：買下去能補齊整區的最後一塊（獨佔：股價與過路費 +20%、四塊地各升一級）→ 現金不夠就賣股湊（cc 已含 90% 股票市值）
+function proBuyoutKey(i, t, cc) {
+  const same = T.filter((x) => x.type === 'land' && x.region === t.region && x.id !== t.id);
+  if (!same.every((x) => owner[x.id] === i)) return false;
+  return cc >= MAP.BUYOUT_MULT * t.price + 3000;
 }
