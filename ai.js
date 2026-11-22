@@ -1,3 +1,4 @@
+var AI_LOT = 99;   // AI 自己的單筆下單量（策略參數，不是遊戲規則；遊戲本身單次買賣已無上限）
 // 伺服器專用，不會傳給瀏覽器。與 engine.js 在同一個環境內執行。
 const MODAL_FN = { card: ['cardOk'], offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
 const ALL_MODAL_FN = [].concat(...Object.values(MODAL_FN));
@@ -29,7 +30,7 @@ function safeAct(fn, a, ex) {
       return allocOk();
     case 'trade':
       if (!reg(a[0]) || (a[1] !== 1 && a[1] !== -1)) return;
-      qty[a[0]] = Math.max(1, Math.min(MAXT, Math.floor(+(ex && ex.q) || 1)));
+      qty[a[0]] = Math.max(1, Math.floor(+(ex && ex.q) || 1));
       return trade(a[0], a[1]);
     case 'sellStock': return reg(a[0]) && int(a[1]) && a[1] > 0 && sellStock(a[0], a[1]);
     case 'sellEnough': return reg(a[0]) && sellEnough(a[0]);
@@ -88,7 +89,7 @@ function aiTrade() {
   const p = P[turn], c = p.cash;
   for (const r of RK) {
     if (traded[r]) continue;
-    const q = Math.min(MAXH - p.st[r], MAXT, Math.floor((c - 8000) * 0.3 / stock[r]));
+    const q = Math.min(MAXH - p.st[r], AI_LOT, Math.floor((c - 8000) * 0.3 / stock[r]));
     if (q >= 1) { qty[r] = q; trade(r, 1); return true; }
     traded[r] = true;
   }
@@ -206,7 +207,7 @@ function proPlanV1(i) {                   // 上一版：這回合在股市格�
     const my = p.st[r], pr = stock[r], drift = proDrift(i, r);
     const oppHold = opp.reduce((s, j) => s + P[j].st[r] * (j === lead ? u : 0.4), 0);
     const isHome = r === home && my >= PRO_P.homeMin;
-    const qb = Math.min(MAXT, MAXH - my, Math.floor((p.cash - reserve) * (isHome && PRO_P.focus ? 1 : PRO_P.frac) / pr));
+    const qb = Math.min(AI_LOT, MAXH - my, Math.floor((p.cash - reserve) * (isHome && PRO_P.focus ? 1 : PRO_P.frac) / pr));
     if (qb >= 1) {
       let s = drift + PRO_P.hold * IM.perShare * (my + qb / 2 - oppHold) + (isHome ? PRO_P.focus : 0);
       // 衝刺：這筆買進把股價推高後，持股增值足以讓總資產跨過獲勝門檻 → 優先做
@@ -216,7 +217,7 @@ function proPlanV1(i) {                   // 上一版：這回合在股市格�
       out.push({ r, side: 1, q: qb, score: s, edge: qb * pr * s, win });
     }
     if (my > 0) {
-      const short = p.cash < reserve, qs = short ? Math.min(MAXT, my, Math.max(1, Math.ceil((reserve - p.cash) / pr))) : Math.min(MAXT, my);
+      const short = p.cash < reserve, qs = short ? Math.min(AI_LOT, my, Math.max(1, Math.ceil((reserve - p.cash) / pr))) : Math.min(AI_LOT, my);
       const s = -drift + PRO_P.hold * PRO_P.harm * IM.perShare * (oppHold - (my - qs / 2)) + (short ? 0.05 : 0);
       out.push({ r, side: -1, q: qs, score: s, edge: qs * pr * s });
     }
@@ -300,14 +301,14 @@ function proRisk(i, r) {                  // 買這區股票的力道倍率：1=
 function proPlanV2(i) {
   const p = P[i], st = proStage(i), A = assets(i), opp = oppOf(i), resv = proResv(i), out = [];
   const add = (r, side, q, prio, sc, ex) => { if (q >= 1) out.push({ r, side, q, prio, score: sc, edge: q * stock[r] * sc, ...ex }); };
-  const room = (r) => Math.min(MAXT, MAXH - p.st[r]);
+  const room = (r) => Math.min(AI_LOT, MAXH - p.st[r]);
   const mine = RK.filter((r) => regScore(i, r) > 0);
   // 賣掉「我沒有地的區域」的持股：這些股票漲了只是在幫對手墊高過路費
-  RK.forEach((r) => { if (!traded[r] && p.st[r] > 0 && !mine.includes(r)) add(r, -1, Math.min(MAXT, p.st[r]), st === 3 ? 2 : 4.5, 0.03); });
+  RK.forEach((r) => { if (!traded[r] && p.st[r] > 0 && !mine.includes(r)) add(r, -1, Math.min(AI_LOT, p.st[r]), st === 3 ? 2 : 4.5, 0.03); });
   if (!mine.length) return out.sort((x, y) => y.prio - x.prio || y.edge - x.edge);
   if (st < 3) {
     const c1 = st === 1, home = homeOf(i, c1);
-    RK.forEach((r) => { if (PH.def && !traded[r] && p.st[r] > 0 && oppToll(i, r) >= PH.defFrac * A) add(r, -1, Math.min(MAXT, p.st[r]), 6, 0.1, { def: true }); });   // 防禦：壓低對手殺傷力
+    RK.forEach((r) => { if (PH.def && !traded[r] && p.st[r] > 0 && oppToll(i, r) >= PH.defFrac * A) add(r, -1, Math.min(AI_LOT, p.st[r]), 6, 0.1, { def: true }); });   // 防禦：壓低對手殺傷力
     let b = Math.max(0, p.cash - resv);
     mine.slice().sort((x, y) => regKey(i, y, c1) - regKey(i, x, c1)).forEach((r) => {
       if (traded[r] || out.some((o) => o.r === r)) return;
@@ -325,12 +326,12 @@ function proPlanV2(i) {
       if (afford < q) {                   // 錢不夠灌滿：先賣別區股票籌錢（優先賣「我沒有地」的區域，再賣持股市值最高的）
         const src = RK.filter((r) => r !== R && !traded[r] && p.st[r] > 0)
           .sort((x, y) => (mine.includes(x) - mine.includes(y)) || (p.st[y] * stock[y] - p.st[x] * stock[x]))[0];
-        if (src && !out.some((o) => o.r === src)) add(src, -1, Math.min(MAXT, p.st[src]), 7, 0.2, big);
+        if (src && !out.some((o) => o.r === src)) add(src, -1, Math.min(AI_LOT, p.st[src]), 7, 0.2, big);
         else if (!out.some((o) => o.side === -1 && o.big)) add(R, 1, Math.min(q, afford), 6, 0.3, big);
       } else add(R, 1, q, 6, 0.3, big);
     }
     if (!out.some((o) => o.big && o.side === -1)) {   // 目標區這次處理完了：多出來的錢往其他有地的區域放
-      const need = traded[R] || reached ? 0 : stock[R] * MAXT;   // 沒過線前，要留下次灌目標區的本錢
+      const need = traded[R] || reached ? 0 : stock[R] * AI_LOT;   // 沒過線前，要留下次灌目標區的本錢
       const regs = mine.filter((r) => r !== R && !traded[r]).sort((x, y) => oppToll(i, y) - oppToll(i, x));
       let b = Math.max(0, budget() - (out.some((o) => o.side === 1) ? 0 : 0) - need);
       const tgt = out.find((o) => o.r === R && o.side === 1); if (tgt) b = Math.max(0, b - tgt.q * stock[R]);

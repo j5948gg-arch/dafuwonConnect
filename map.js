@@ -43,7 +43,7 @@
   const TILES = [START, ...RING, ...CENTER.filter((t) => t !== START)].map((t, id) => ({ id, ...t }));
   // ---- 台灣地名版：就地改地區名稱與土地名稱（依各區土地在地圖定義中的順序對應）----
   const TW = {
-    regions: { africa: '台北市', oceania: '新北市', asia: '台南市', america: '高雄市', europe: '台中市' },
+    regions: { africa: '台北市', oceania: '新北市', asia: '台南', america: '高雄市', europe: '台中' },
     lands: {
       africa:  ['士林區', '大安區', '萬華區', '信義區'],
       america: ['左營區', '鼓山區', '苓雅區', '旗津區'],

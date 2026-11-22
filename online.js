@@ -18,7 +18,7 @@ confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 const setRule = (k, v) => tx({ t: 'rules', rules: { ...LRULES, [k]: v } });
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, chest, skull, roundNo } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, aidPot, chest, skull, roundNo } = s);
   applyLocale();   // 台灣地名版：依伺服器的規則切換地名
 }
 function connect() {
