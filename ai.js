@@ -97,8 +97,9 @@ function aiTrade() {
 }
 
 // 被提出交易的是 AI（或暫離的玩家）時，由伺服器呼叫：對方出價夠高才接受
-function aiRespond() {
+function aiRespond(alwaysDecline) {   // alwaysDecline：真正的 AI 座位（普通／高階）一律拒絕；只有「暫離／離線的真人」才由此代為評估
   if (!offer) return;
+  if (alwaysDecline) return offerDecline();
   const o = offer, w = T[o.want], g = o.give >= 0 ? T[o.give] : null;
   let get = o.cash + (g ? landVal(g) : 0), lose = landVal(w);
   if (g && T.every((t) => t.type !== 'land' || t.region !== g.region || t.id === g.id || owner[t.id] === o.to)) get *= 1.5; // 補齊整區獨佔（股價、過路費 +20%、四塊地升級）
@@ -126,7 +127,11 @@ function proWeight(i, path) {
       if (assets(i) >= MAP.WIN_ASSETS) gain += 1e6;                                  // 經過或停在起點就能獲勝
       if (MAP.GEM_KEYS.every((g) => gems[g])) gain += 8000;
     }
-    if (RULES.chest && id === chest && pot > 0) gain += Math.round(pot * (k === path.length - 1 ? CHEST_STOP : CHEST_PASS));   // 寶箱：經過領 30%、停下領 80%
+    if (RULES.chest && id === chest && pot > 0) {   // 寶箱：經過領 30%、停下領 80%；停下時除該區外其餘地區股價 +10%（自己的持股跟著漲）
+      const stop = k === path.length - 1, rg = chestRegion(id);
+      gain += Math.round(pot * (stop ? CHEST_STOP : CHEST_PASS));
+      if (stop) gain += CHEST_BOOST * RK.reduce((a, r) => a + (r === rg ? 0 : p.st[r] * stock[r]), 0);
+    }
     if (k !== path.length - 1) return;
     if (RULES.skull && id === skull) { const rg = chestRegion(id); if (rg) cost += SKULL_DROP * p.st[rg] * stock[rg]; }   // 骷髏：自己在該區的持股會縮水
     if (t.type === 'start') gain += 1500;
@@ -357,10 +362,10 @@ function proUpPick(i, ok) {               // 升級順序：後期先升「殺�
 
 
 // ======================= 高階 AI v3：針對「全部特殊規則開啟」的強化 =======================
-// 舊版的缺口：① 完全不考慮手續費／證交稅／價格衝擊的實際成本（只用線性公式估）；② 單筆被 AI_LOT=99 綁死，
+// 舊版的缺口：① 完全不考慮價格衝擊的實際成本（只用線性公式估）；② 單筆被 AI_LOT=99 綁死，
 // 但現在人類單次買賣沒有上限，在「價格衝擊」下大量買進會把「自己已持有的股票」一起墊高，持股越多越划算。
 // v3 做法：沿用 v2 的階段／優先順序，但每一筆交易用 buyQuote／sellQuote 的真實報價，在候選股數中挑「帳面淨賺最多」的量：
-//   淨賺 = 我的持股帳面變化（含滑價、手續費、證交稅）− β × 對手（領先者加權）的持股帳面變化 + 配息變化 + 過路費變化 + 原計畫的結構性收益
+//   淨賺 = 我的持股帳面變化（含價格衝擊的滑價）− β × 對手（領先者加權）的持股帳面變化 + 配息變化 + 過路費變化 + 原計畫的結構性收益
 // 另外會主動找 v2 沒列入計畫的機會：持股大的區域拉抬、對手持股遠多於我的區域壓價。
 const PRO_X = [];                         // PRO_X[座位] = false → 該座位停用 v3（對照測試用）；預設全部高階 AI 啟用
 const proX = (i) => proV2(i) && PRO_X[i] !== false;

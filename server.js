@@ -9,8 +9,8 @@ const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/ja
 const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,aidPot,chest,skull,roundNo})';
 const NONE = JSON.stringify({ t: 'none' });
 // 特殊規則：每項獨立開關；「彩池寶箱」必須搭配「土地稅與彩池」
-const RULE_KEYS = ['tw', 'div', 'fee', 'aid', 'imp', 'kline', 'tax', 'chest', 'skull'];
-const cleanRules = (x) => { const o = {}; RULE_KEYS.forEach((k) => (o[k] = !!(x && x[k]))); if (!o.tax) o.chest = false; if (!o.fee) o.aid = false; return o; };
+const RULE_KEYS = ['tw', 'div', 'aid', 'imp', 'kline', 'tax', 'chest', 'skull'];
+const cleanRules = (x) => { const o = {}; RULE_KEYS.forEach((k) => (o[k] = !!(x && x[k]))); if (!o.tax) { o.chest = false; o.aid = false; } return o; };
 const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));
 
@@ -221,7 +221,7 @@ setInterval(() => {
       if (now - r.lastAI > 800) {
         r.lastAI = now;
         const os = r.seats[+ev(r, 'offer?offer.to:-1')];   // 被提出交易的是 AI／暫離／離線的玩家：由 AI 代為回應
-        if (os && (os.ai || os.away || (!os.ws && now - os.off > 20000))) ev(r, 'aiRespond()');
+        if (os && (os.ai || os.away || (!os.ws && now - os.off > 20000))) ev(r, os.ai ? 'aiRespond(true)' : 'aiRespond()');
         const s = r.seats[+ev(r, 'turn')];
         if (s && (s.ai || s.away || (!s.ws && now - s.off > 20000))) ev(r, 'aiStep()'); // AI 座位、暫時離開、或離線超過 20 秒：由 AI 代打
       }
