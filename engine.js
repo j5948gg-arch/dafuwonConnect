@@ -202,15 +202,15 @@ function randGem(i,missingOnly){
 function buildCards(){
   const c=[],add=(name,fn)=>c.push({name,fn});
   add('前進一格',()=>advance(1));
-  add('給所有人300元',i=>{const os=others(i);if(!os.length)return log('沒有其他玩家');pay(i,-1,300*os.length,'分給所有人的現金',()=>os.forEach(o=>{P[o].cash+=300;}));});
-  add('從所有人獲得300元',i=>others(i).forEach(o=>{const m=Math.min(300,P[o].cash);P[o].cash-=m;P[i].cash+=m;}));
+  add('選擇一塊自己持有的E級土地連升兩級',i=>pickTile('哪一塊自己的 E 級土地連升兩級（E→C）？',lands(i).filter(t=>(lv[t.id]||0)===0),id=>{lv[id]=2;log(`${pn(i)} 的 ${nm(id)} 由 E 級連升兩級為 C 級`);}));
+  add('選擇場上一塊被持有的土地下降一級（E級不能選）',i=>askBox('哪一塊被持有的土地下降一級？（E 級不能選）',T.filter(t=>t.type==='land'&&owner[t.id]!==undefined&&(lv[t.id]||0)>=1).map(t=>({label:`${MAP.LEVELS[lv[t.id]||0]}級 ${t.name}（${RN(t.region)}，${pn(owner[t.id])}）`,fn:()=>{const l=lv[t.id]||0;lv[t.id]=l-1;log(`${nm(t.id)}（${pn(owner[t.id])}）由 ${MAP.LEVELS[l]} 級降為 ${MAP.LEVELS[l-1]} 級`);}}))));
   add('指定傳送至任一土地格',i=>pickTile('傳送到哪塊土地？',T.filter(t=>t.type==='land'),id=>teleport(i,id)));
   add('返回起點',i=>teleport(i,0));
   RK.forEach((r,k)=>add(`獲得${k+1}區股票10張`,i=>addSt(i,r,10)));
   add('隨機獲得某區股票10張',i=>addSt(i,rnd(RK),10));
   add('隨機獲得某區股票20張',i=>addSt(i,rnd(RK),20));
   add('所有人來到此寶石格',i=>{others(i).forEach(o=>{P[o].pos=P[i].pos;P[o].prev=teleportPrev(P[i].pos);});log('所有人來到此寶石格');});
-  add('能以五倍原土地價格販賣任一持有土地',i=>pickTile('以原始地價 5 倍賣出哪塊地？',lands(i),id=>{const v=5*T[id].price;bump(T[id].region,-IM.sellLand);dropLand(id);P[i].cash+=v;log(`${pn(i)} 以 5 倍價賣出 ${nm(id)}（${money(v)}）`);},true));
+  add('所有股價隨機波動±15%，每區單獨計算',()=>RK.forEach(r=>{const p=(Math.random()*30-15)/100;bump(r,p);log(`${RN(r)}股價隨機波動 ${p>=0?'+':''}${(p*100).toFixed(1)}%`);}));
   add('指定一區域股票上升10%',()=>pickR('哪一區股價上升 10%？',r=>bump(r,.1)));
   add('指定一區域股票下降10%',()=>pickR('哪一區股價下降 10%？',r=>bump(r,-.1)));
   add('選擇一區域平分總股票數量',i=>pickR('選一區域，所有玩家平分該區股票',r=>{
@@ -218,7 +218,7 @@ function buildCards(){
     al.forEach(j=>{P[j].st[r]=Math.min(MAXH,each);});P[i].st[r]=Math.min(MAXH,each+rem);log(`${RN(r)}股票 ${tot} 張平分，每人 ${each} 張（餘 ${rem} 張給翻牌者）`);}));
   add('所有人回到起點',i=>{others(i).forEach(o=>{P[o].pos=0;P[o].prev=MAP.ADJ[0][0];});log('所有人回到起點');teleport(i,0);});
   add('指定一區域股價與最高區域股價相同',()=>pickR('哪一區股價調成與最高區相同？',r=>setPrice(r,Math.max(...RK.map(x=>stock[x])))));
-  add('向一人收取500元',i=>pickP('向哪位玩家收取 500 元？',others(i),j=>{const m=Math.min(500,P[j].cash);P[j].cash-=m;P[i].cash+=m;log(`${pn(i)} 向${pn(j)} 收取 ${m}`);}));
+  add('玩家等級+1',i=>{P[i].level++;log(`${pn(i)} 升為 Lv.${P[i].level}`);});
   add('指定一區域股價翻倍',()=>pickR('哪一區股價翻倍？',r=>bump(r,1)));
   add('獲得所有區域股票5張',i=>RK.forEach(r=>addSt(i,r,5)));
   add('所有人的現金相加後平分給眾人',i=>{
@@ -285,16 +285,17 @@ function cardOk(){
 }
 
 /* ---------- 卡牌圖案：依效果分類畫成圖示，底色依類型（金錢＝金、股票＝藍、過路費／土地＝橘綠、移動＝紫、寶石＝粉） ---------- */
-const CKIND=[[/前進一格/,'forward'],[/給所有人.*元/,'give'],[/從所有人獲得|向一人收取/,'take'],[/所有人的現金相加/,'split'],[/所有人現金增加/,'coin'],[/擲骰點數/,'dice'],
+const CKIND=[[/前進一格/,'forward'],[/玩家等級/,'level'],[/所有人的現金相加/,'split'],[/所有人現金增加/,'coin'],[/擲骰點數/,'dice'],
   [/寶石/,'gem'],[/交換位置/,'swap'],[/傳送|返回起點|回到起點/,'portal'],[/平分總股票|隨意分配/,'split'],[/拋售|販賣/,'sell'],[/額外獲得一次股市/,'trade'],
-  [/升為|全部升一級/,'build'],[/過路費/,'toll'],[/回歸原始值/,'reset'],[/上升|下降|翻倍|減半|相同/,'chart'],[/股票.*張/,'stock']];
-const CHUE={forward:'#7b5cd6',portal:'#7b5cd6',swap:'#7b5cd6',give:'#d9a100',take:'#d9a100',coin:'#d9a100',dice:'#d9a100',split:'#d9a100',gem:'#d6457f',sell:'#2f6fdb',trade:'#2f6fdb',chart:'#2f6fdb',reset:'#2f6fdb',stock:'#2f6fdb',toll:'#e0762a',build:'#2e9d4f'};
+  [/升為|全部升一級|連升兩級|下降一級/,'build'],[/過路費/,'toll'],[/回歸原始值/,'reset'],[/上升|下降|翻倍|減半|相同|波動/,'chart'],[/股票.*張/,'stock']];
+const CHUE={forward:'#7b5cd6',portal:'#7b5cd6',swap:'#7b5cd6',level:'#d9a100',coin:'#d9a100',dice:'#d9a100',split:'#d9a100',gem:'#d6457f',sell:'#2f6fdb',trade:'#2f6fdb',chart:'#2f6fdb',reset:'#2f6fdb',stock:'#2f6fdb',toll:'#e0762a',build:'#2e9d4f'};
 function cardBadge(n){
   let m;
   if(m=n.match(/\*(\d+)元/))return '×'+m[1];
   if(m=n.match(/(\d+)張/))return '+'+m[1];
   if(m=n.match(/(上升|提升|增加)(\d+)%/))return '+'+m[2]+'%';
   if(m=n.match(/(下降|減少)(\d+)%/))return '−'+m[2]+'%';
+  if(/連升兩級/.test(n))return '+2級';if(/下降一級/.test(n))return '−1級';if(/波動/.test(n))return '±15%';if(/玩家等級/.test(n))return 'Lv+1';
   if(/翻倍/.test(n))return '×2';if(/減半/.test(n))return '×½';if(/五倍/.test(n))return '×5';if(/兩倍/.test(n))return '×2';
   if(m=n.match(/(\d+)元/))return m[1];
   if(/相同/.test(n))return '＝最高';
@@ -309,6 +310,7 @@ function cardArt(idx){
   let g='';
   switch(k){
     case 'forward':g=`<path d="M22 60h60M62 38l24 22-24 22" ${S(7)}/><circle cx="28" cy="84" r="5" ${fl}/><circle cx="46" cy="90" r="5" ${fl}/>`;break;
+    case 'level':g=`<path d="M60 24l10 22 24 3-18 16 5 24-21-12-21 12 5-24-18-16 24-3z" ${fl}/><path d="M60 100V82M52 90l8-8 8 8" ${S(5)}/>`;break;
     case 'give':g=coin(42,58,24)+`<path d="M74 44l24 0M74 60h28M74 76h24" ${S(5)}/>`+`<path d="M92 36l10 8-10 8M96 52l8 8-8 8" ${S(4)}/>`;break;
     case 'take':g=coin(78,58,24)+`<path d="M46 44h-24M46 60h-28M46 76h-24" ${S(5)}/><path d="M38 36l10 8-10 8" ${S(4)}/>`;break;
     case 'coin':g=coin(60,58,32)+`<text x="60" y="104" font-size="16" font-weight="800" text-anchor="middle" ${fl}>＋＋</text>`;break;
@@ -319,10 +321,10 @@ function cardArt(idx){
     case 'portal':g=`<ellipse cx="60" cy="60" rx="38" ry="38" ${S(5)}/><ellipse cx="60" cy="60" rx="26" ry="26" ${S(5)} opacity=".8"/><ellipse cx="60" cy="60" rx="14" ry="14" ${S(5)} opacity=".6"/><circle cx="60" cy="60" r="5" ${fl}/>`;break;
     case 'sell':g=`<path d="M24 28h40l32 32-36 36-36-36z" ${fl}/><circle cx="42" cy="46" r="6" fill="${hue}"/><text x="66" y="72" font-size="26" font-weight="800" text-anchor="middle" fill="${hue}">$</text>`;break;
     case 'trade':g=[[28,52,18],[52,40,30],[76,58,16]].map(c=>`<path d="M${c[0]+6} ${c[1]-8}v${c[2]+16}" stroke="#fff" stroke-width="3"/><rect x="${c[0]-2}" y="${c[1]}" width="16" height="${c[2]}" rx="2" ${fl}/>`).join('')+`<path d="M92 40a18 18 0 1 1-6 22M92 28v14h-14" ${S(5)}/>`;break;
-    case 'build':g=`<rect x="22" y="64" width="22" height="34" ${fl}/><rect x="49" y="46" width="22" height="52" ${fl}/><rect x="76" y="26" width="22" height="72" ${fl}/><path d="M24 50l18-18M42 32v12M42 32h-12" ${S(4)}/>`;break;
+    case 'build':g=/下降一級/.test(nm)?`<rect x="22" y="26" width="22" height="72" ${fl}/><rect x="49" y="46" width="22" height="52" ${fl}/><rect x="76" y="64" width="22" height="34" ${fl}/><path d="M24 30l18 18M42 48v-12M42 48h-12" ${S(4)}/>`:`<rect x="22" y="64" width="22" height="34" ${fl}/><rect x="49" y="46" width="22" height="52" ${fl}/><rect x="76" y="26" width="22" height="72" ${fl}/><path d="M24 50l18-18M42 32v12M42 32h-12" ${S(4)}/>`;break;
     case 'toll':g=`<path d="M60 22L22 54h12v40h52V54h12z" ${fl}/><rect x="52" y="66" width="16" height="28" fill="${hue}"/>`+coin(88,40,16);break;
     case 'reset':g=`<path d="M92 56a32 32 0 1 0-8 24M92 36v22H70" ${S(6)}/><path d="M42 70l12-14 10 8 14-18" ${S(5)}/>`;break;
-    case 'chart':g=`<path d="M20 90V26M20 90h84" stroke="#fff" stroke-width="4" opacity=".7"/>`+(/相同/.test(nm)?`<path d="M26 56h68" ${S(7)} stroke-dasharray="8 8"/><path d="M26 82l20-14 16 8 30-34" ${S(7)}/>`:up?`<path d="M26 84l22-18 16 10 32-40M78 36h16v16" ${S(7)}/>`:`<path d="M26 36l22 18 16-10 32 40M78 84h16V68" ${S(7)}/>`);break;
+    case 'chart':g=`<path d="M20 90V26M20 90h84" stroke="#fff" stroke-width="4" opacity=".7"/>`+(/波動/.test(nm)?`<path d="M26 60l16-24 16 40 16-40 16 24" ${S(7)}/>`:/相同/.test(nm)?`<path d="M26 56h68" ${S(7)} stroke-dasharray="8 8"/><path d="M26 82l20-14 16 8 30-34" ${S(7)}/>`:up?`<path d="M26 84l22-18 16 10 32-40M78 36h16v16" ${S(7)}/>`:`<path d="M26 36l22 18 16-10 32 40M78 84h16V68" ${S(7)}/>`);break;
     case 'stock':{const cols=reg?[RCOL[RK[reg-1]]]:/所有區域/.test(nm)?RK.map(r=>RCOL[r]):/某區/.test(nm)?['#e53935','#1e88e5','#2e9d4f']:[hue];
       g=`<rect x="22" y="26" width="76" height="68" rx="8" ${fl}/>`+cols.map((c,j)=>`<rect x="22" y="${26+j*(68/cols.length)}" width="76" height="${68/cols.length}" fill="${c}" opacity=".9"/>`).join('')+`<path d="M34 54h52M34 66h40M34 78h46" stroke="#fff" stroke-width="4" opacity=".85" stroke-linecap="round"/><rect x="22" y="26" width="76" height="68" rx="8" fill="none" stroke="#fff" stroke-width="4"/>`;break;}
   }
