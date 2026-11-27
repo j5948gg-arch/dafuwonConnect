@@ -98,10 +98,10 @@
   //   左邊是箭尾（12 格含起點、含休），右邊是箭頭（18 格含起點、含股市與兩個樂透）。起點有四個方向（走到那裡要選方向）。
   const ay = (row) => 6 - row;
   const AR_START = START(3, ay(3));
-  const AR_TAIL = [   // 箭尾：起點 → 帛琉 → 紐西蘭 → 寶石 → 斐濟 → 澳洲 → 休 → 美國 → 墨西哥 → 寶石 → 巴西 → 加拿大 → 回起點
+  const AR_TAIL = [   // 箭尾：起點 → 帛琉 → 紐西蘭 → 寶石 → 斐濟 → 澳洲 → 休（在第 1 欄） → 美國 → 墨西哥 → 寶石 → 巴西 → 加拿大 → 回起點
     L('帛琉', 2, ay(2), 'oceania', 1700), L('紐西蘭', 2, ay(1), 'oceania', 1550), G('ruby', 1, ay(1), null),
     L('斐濟', 0, ay(1), 'oceania', 1550), L('澳洲', 0, ay(2), 'oceania', 1800),
-    REST(0, ay(3)),
+    REST(1, ay(3)),   // 休往右挪一格，與帛琉、澳洲、加拿大、美國相連（見下方 links）
     L('美國', 0, ay(4), 'america', 2000), L('墨西哥', 0, ay(5), 'america', 1350), G('sapphire', 1, ay(5), null),
     L('巴西', 2, ay(5), 'america', 1300), L('加拿大', 2, ay(4), 'america', 1450),
   ];
@@ -118,7 +118,10 @@
   const ARROW = {
     id: 'arrow', name: '箭矢', desc: '29 格：起點在中間，左邊是箭尾、右邊是箭頭，兩個迴圈相連；起點有四個方向，含兩個樂透、休、股市', bounds: { x0: 0, x1: 7, y0: 0, y1: 6 }, panels: 'center',
     tiles: [AR_START, ...AR_TAIL, ...AR_HEAD],
-    links: [...loopLinks([AR_START, ...AR_TAIL]), ...loopLinks([AR_START, ...AR_HEAD])],
+    links: [...loopLinks([AR_START, ...AR_TAIL]), ...loopLinks([AR_START, ...AR_HEAD]),
+      [1, ay(3), 2, ay(2)], [1, ay(3), 2, ay(4)],   // 休 ↔ 帛琉、加拿大（休 ↔ 澳洲、美國 已在外圈順序裡）
+      [7, ay(2), 7, ay(4)],                          // 法國 ↔ 德國（另外保留各自與股市的連線）
+    ],
     tris: [],
   };
   const DEFS = { classic: CLASSIC, heart: HEART, arrow: ARROW };
