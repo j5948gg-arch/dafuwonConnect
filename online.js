@@ -1,5 +1,5 @@
 // 瀏覽器端：畫面沿用 engine.js 的 render()，狀態由伺服器推送，動作送回伺服器執行。
-let ws, ROOM = null, SEATS = [], HOST = 0, STARTED = false, DRAW = null, LRULES = {};
+let SRVOFF = 0, ws, ROOM = null, SEATS = [], HOST = 0, STARTED = false, DRAW = null, LRULES = {};
 const token = localStorage.wm_token || (localStorage.wm_token = Math.random().toString(36).slice(2) + Date.now().toString(36));
 const tx = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ token, ...o }));
 const rpc = (fn, ...args) => tx({ t: 'act', fn, args });
@@ -12,13 +12,13 @@ allocOk = () => tx({ t: 'act', fn: 'allocOk', args: [], vals: alloc.vals });
 trade = (r, s) => tx({ t: 'act', fn: 'trade', args: [r, s], q: qty[r] });
 offerMake = (to, want, give, cash) => rpc('offerMake', to, want, give, cash); offerAccept = () => rpc('offerAccept');
 offerDecline = () => rpc('offerDecline'); offerCancel = () => rpc('offerCancel');
-sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnough', r); sellLand = (id) => rpc('sellLand', id);
+sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnough', r); sellLand = (id) => rpc('sellLand', id); aucBid = () => rpc('aucBid');
 closeExtra = () => rpc('closeExtra');
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 const setRule = (k, v) => tx({ t: 'rules', rules: { ...LRULES, [k]: v } });
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, aidPot, chest, skull, roundNo } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, auc, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, aidPot, chest, skull, roundNo } = s);
   applyLocale();   // 台灣地名版：依伺服器的規則切換地名
 }
 function connect() {
@@ -31,6 +31,7 @@ function connect() {
     if (m.t === 'notice') return toast(m.msg);
     if (m.t === 'none') { ROOM = null; STARTED = false; DRAW = null; return view(); }
     DRAW = m.draw || null;
+    if (m.now) SRVOFF = m.now - Date.now();   // 伺服器與本機的時間差（拍賣倒數用）
     ROOM = m.code; SEATS = m.seats; HOST = m.host; ME = m.you; STARTED = m.started; LRULES = m.rules || {};
     NAMES = m.seats.map((s) => s.name); AWAY = m.seats.map((s) => !!s.away); PIC = m.seats.map((s) => s.pic);
     C = m.seats.map((s) => MAP.PALETTE[s.color].c);
@@ -104,12 +105,13 @@ function view() {
   $('#tb').innerHTML = topButtons(); $('#vt').innerHTML = voteHtml();
   const mine = turn === ME && !away();
   const inOffer = offer && (ME === offer.to || ME === offer.from) && !away();   // 交易進行中：只有交易雙方能在彈窗上操作
-  document.querySelectorAll('.wrap').forEach((e) => e.classList.toggle('wait', offer ? true : !mine));
-  document.querySelectorAll('#md').forEach((e) => e.classList.toggle('wait', offer ? !inOffer : !mine));
+  document.querySelectorAll('.wrap').forEach((e) => e.classList.toggle('wait', offer || auc ? true : !mine));
+  document.querySelectorAll('#md').forEach((e) => e.classList.toggle('wait', auc ? false : offer ? !inOffer : !mine));   // 拍賣：所有人都能在彈窗上按競標
   $('#st').innerHTML = `房號 ${ROOM}｜你是 <b style="color:${C[ME]}">${pn(ME)}</b>｜` +
     (phase === 'over' ? '遊戲結束 ' + (ME === HOST ? '<button onclick="tx({t:\'rematch\'})">回到大廳再來一局</button>' : '')
       : away() ? '<b class="hint">你已暫時離開，AI 正在代打。準備好了就按右邊的「關閉 AI，接手操作」</b>'
       : mine ? '<b class="hint">輪到你了</b>' : `等待 <b style="color:${C[turn]}">${pnA(turn)}</b> 操作…`);
   render();
 }
+setInterval(() => { if (typeof auc !== 'undefined' && auc) aucTimer(); }, 200);
 connect();

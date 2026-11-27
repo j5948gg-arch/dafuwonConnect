@@ -6,7 +6,7 @@ const PIC_COUNT = 12, COLOR_COUNT = 8;
 // 圖片每次都從磁碟讀取（換圖後不必重啟伺服器），並用 ETag 讓瀏覽器每次先確認有沒有更新
 const img = (n) => { const b = fs.readFileSync(path.join(__dirname, 'img', 'p' + n + '.png')); return { b, tag: '"' + require('crypto').createHash('md5').update(b).digest('hex') + '"' }; };
 const PAGES = { '/': ['index.html', 'text/html'], '/map.js': ['map.js', 'text/javascript'], '/engine.js': ['engine.js', 'text/javascript'], '/online.js': ['online.js', 'text/javascript'] };
-const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,aidPot,chest,skull,roundNo})';
+const SNAP = 'JSON.stringify({P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,extraOn,turn,phase,left,dice,rollSeq,first,choices,busy,logs,need,mfx,mfxSeq,auc,offer,offerN,hist,shist,cardShow,RULES,kl,kc,pot,aidPot,chest,skull,roundNo})';
 const NONE = JSON.stringify({ t: 'none' });
 // 特殊規則：每項獨立開關；「彩池寶箱」必須搭配「土地稅與彩池」
 const RULE_KEYS = ['tw', 'div', 'aid', 'imp', 'kline', 'tax', 'chest', 'skull'];
@@ -28,7 +28,7 @@ const ev = (r, code) => vm.runInContext(code, r.ctx);
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
   const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, pic: s.pic, color: s.color, away: !!s.away, online: s.ai || !!s.ws }));
-  r.seats.forEach((s, i) => send(s.ws, { t: 'state', code: r.code, started: r.started, rules: cleanRules(r.rules), seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
+  r.seats.forEach((s, i) => send(s.ws, { t: 'state', now: Date.now(), code: r.code, started: r.started, rules: cleanRules(r.rules), seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
 }
 function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
 
@@ -222,9 +222,11 @@ setInterval(() => {
         r.lastAI = now;
         const os = r.seats[+ev(r, 'offer?offer.to:-1')];   // 被提出交易的是 AI／暫離／離線的玩家：由 AI 代為回應
         if (os && (os.ai || os.away || (!os.ws && now - os.off > 20000))) ev(r, os.ai ? 'aiRespond(true)' : 'aiRespond()');
+        if (ev(r, '!!auc')) r.seats.forEach((x, k) => { if (x.ai || x.away || (!x.ws && now - x.off > 20000)) ev(r, `aiAuction(${k})`); });   // 拍賣中：AI／代打座位自己決定要不要競標
         const s = r.seats[+ev(r, 'turn')];
         if (s && (s.ai || s.away || (!s.ws && now - s.off > 20000))) ev(r, 'aiStep()'); // AI 座位、暫時離開、或離線超過 20 秒：由 AI 代打
       }
+      ev(r, 'aucTick()');   // 拍賣：時間到就結算這一時段
       sync(r);
     } catch (e) { console.error(e); }
   }

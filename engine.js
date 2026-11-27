@@ -3,7 +3,7 @@ const picUrl=i=>`/img/p${PIC[i]!==undefined?PIC[i]:i}.png?v=${MAP.PIC_VER}`;cons
 let extraOn=false,pendingTrade=false,resumeMove=false;
 let mfx=[],mfxSeq=0,MFX_SEEN=null; // 玩家間金錢異動（動畫用）：{id,i,a}
 let mono={},monoLvDone={};   // 各區目前的獨佔者、是否已發過升級獎勵
-let offer=null,offerN=0,tradeUI=null,hist=[],shist=[],cardShow=null,RULES={tw:0,div:0,aid:0,imp:0,kline:0,tax:0,chest:0,skull:0},kl=[],kc=null,pot=0,aidPot=0,chest=-1,skull=-1,roundNo=1,inRound=false;   // cardShow：翻開、等玩家按確認才執行的牌 {s,c,by,n,a,b}
+let auc=null,offer=null,offerN=0,tradeUI=null,hist=[],shist=[],cardShow=null,RULES={tw:0,div:0,aid:0,imp:0,kline:0,tax:0,chest:0,skull:0},kl=[],kc=null,pot=0,aidPot=0,chest=-1,skull=-1,roundNo=1,inRound=false;   // cardShow：翻開、等玩家按確認才執行的牌 {s,c,by,n,a,b}
    // 玩家間交易、每回合總資產紀錄
 const histNow=()=>P.map((_,i)=>assets(i));
 const mfxAdd=(i,a)=>{if(!a)return;mfx.push({id:++mfxSeq,i,a});if(mfx.length>8)mfx.shift();};
@@ -27,7 +27,7 @@ function reset(){
   owner={};lv={};inv={};mono={};monoLvDone={};winner=-1;chg=Object.fromEntries(RK.map(r=>[r,0]));stock=Object.fromEntries(RK.map(r=>[r,150+(Math.random()*151|0)]));
   qty=Object.fromEntries(RK.map(r=>[r,1]));sf={...stock};base={...stock};tollMod={};landMod={};traded={};ask=null;alloc=null;cardShow=null;upUsed=0;upIds=[];flipUsed=false;justBought=-1;lastCard='';newDeck();
   turn=0;phase='roll';left=0;dice=0;rollSeq=0;first=true;choices=null;busy=false;need=null;extraOn=false;pendingTrade=false;resumeMove=false;mfx=[];mfxSeq=0;
-  logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];hist=[histNow()];shist=[{...stock}];kl=[];pot=0;aidPot=0;chest=-1;skull=-1;roundNo=1;inRound=false;kOpen();if(RULES.skull)moveSkull();offer=null;offerN=0;tradeUI=null;render();
+  logs=['遊戲開始，每人現金 '+money(START_CASH)+'。'];hist=[histNow()];shist=[{...stock}];kl=[];pot=0;aidPot=0;chest=-1;skull=-1;roundNo=1;inRound=false;kOpen();if(RULES.skull)moveSkull();offer=null;offerN=0;tradeUI=null;auc=null;render();
 }
 const nm=id=>id==null?'—':T[id].name;
 const log=s=>{logs.unshift(s);if(logs.length>40)logs.pop();};
@@ -694,9 +694,41 @@ function sellStock(r,n){
   const Q=sellQuote(r,n);p.st[r]-=n;p.cash+=Q.net;log(`${pn(turn)} 賣出${RN(r)} ${n} 股（${money(Q.net)}）`);bump(r,-Q.m);kVol(r,n);chk();
 }
 function sellEnough(r){const sh=need.amount-P[turn].cash;let n=Math.max(1,Math.ceil(sh/stock[r]));if(RULES.imp){n=1;while(n<P[turn].st[r]&&sellQuote(r,n).net<sh)n++;}sellStock(r,n);}
+/* ---------- 土地拍賣：缺錢賣地時，不再直接賣給銀行，改由其他玩家競標 ----------
+   底價＝土地價值（地價＋升級投入）。任何人按「競標」，價格立刻 +AUC_STEP、該玩家成為領先者，倒數重新從 AUC_MS（6 秒）開始；
+   倒數期間沒有人再加價，最後加價者以目前價格得標。從頭到尾都沒人競標，則由銀行以底價收購（賣方至少拿到土地價值）。
+   伺服器依收到的先後順序處理競標。得標者連同等級、升級投入一起接手這塊地。 */
+const AUC_STEP=500,AUC_MS=6000;
 function sellLand(id){
-  if(hasStock(turn)||owner[id]!==turn)return;
-  const v=landVal(T[id]);bump(T[id].region,-IM.sellLand);delete owner[id];delete lv[id];delete inv[id];delete landMod[id];P[turn].cash+=v;log(`${pn(turn)} 賣掉 ${nm(id)}（${money(v)}）`);monoSync();chk();
+  if(auc||!need||hasStock(turn)||owner[id]!==turn)return;
+  const v=landVal(T[id]);
+  auc={id,seller:turn,base:v,price:v,leader:-1,count:0,endAt:Date.now()+AUC_MS};
+  log(`🔨 ${pn(turn)} 拍賣 ${nm(id)}，底價 ${money(v)}（每次加價 ${money(AUC_STEP)}，${AUC_MS/1000} 秒內無人再加價即得標）`);
+  render();
+}
+function aucBid(i){
+  if(!auc||!Number.isInteger(i)||!P[i]||!P[i].alive||i===auc.seller||i===auc.leader)return;
+  if(P[i].cash<auc.price+AUC_STEP)return;   // 只能用現金競標
+  auc.price+=AUC_STEP;auc.leader=i;auc.count++;auc.endAt=Date.now()+AUC_MS;   // 每次加價就重新倒數 6 秒
+  log(`🔨 ${pn(i)} 加價到 ${money(auc.price)}`);
+  render();
+}
+function aucTick(){   // 伺服器定時呼叫：倒數結束就成交
+  if(!auc)return;
+  if(phase==='over'){auc=null;return;}
+  if(Date.now()>=auc.endAt)aucEnd();
+}
+function aucEnd(){
+  const a=auc;auc=null;const id=a.id,s=a.seller,w=a.leader;
+  if(owner[id]!==s)return render();
+  if(w>=0&&P[w].alive&&P[w].cash>=a.price){
+    P[w].cash-=a.price;P[s].cash+=a.price;owner[id]=w;mfxAdd(w,-a.price);mfxAdd(s,a.price);   // 等級、升級投入與地塊加成都由得標者接手
+    log(`🔨 成交！${pn(w)} 以 ${money(a.price)} 標得 ${nm(id)}（底價 ${money(a.base)}，${pn(s)} 多拿 ${money(a.price-a.base)}）`);
+  }else{
+    bump(T[id].region,-IM.sellLand);delete owner[id];delete lv[id];delete inv[id];delete landMod[id];P[s].cash+=a.base;
+    log(`🔨 流標：沒有人競標，銀行以底價 ${money(a.base)} 收購 ${nm(id)}`);
+  }
+  monoSync();chk();
 }
 function confirmNeed(){const d=need.done;need=null;d();render();}
 function cancelNeed(){need=null;render();}
@@ -800,9 +832,33 @@ function modal(){
   if(p.cash>=need.amount)body=`<p>現金已足夠。</p><button class="big" onclick="confirmNeed()">確認${need.desc}</button>`;
   else if(hasStock(need.who))body=`<p>是否賣出股票？（尚有股票時不能賣地）</p><table>`+RK.filter(r=>p.st[r]>0).map(r=>
     `<tr><td>${RN(r)}</td><td>${p.st[r]} 股 × ${stock[r]}</td><td><button onclick="sellStock('${r}',1)">賣1</button><button onclick="sellEnough('${r}')">賣到夠</button><button onclick="sellStock('${r}',${p.st[r]})">全賣</button></td></tr>`).join('')+`</table>`;
-  else body=`<p>已無股票可賣，可賣出土地（地價＋升級投入）：</p>`+lands(need.who).map(t=>`<button onclick="sellLand(${t.id})">賣 ${t.name} +${money(landVal(t))}</button>`).join('');
+  else body=`<p>已無股票可賣，可拍賣土地（底價＝地價＋升級投入；其他玩家競標，無人競標則銀行以底價收購）：</p>`+lands(need.who).map(t=>`<button onclick="sellLand(${t.id})">拍賣 ${t.name}（底價 ${money(landVal(t))}）</button>`).join('');
   const cancel=need.forced?'':`<button onclick="cancelNeed()">取消</button>`;
   return `<div class="md"><div class="box"><b>現金不足</b><p>${need.desc}需要 ${money(need.amount)}，現金 ${money(p.cash)}，還差 <b>${money(Math.max(0,short))}</b>。</p>${body}<div>${cancel}</div></div></div>`;
+}
+const aucLeft=()=>Math.max(0,Math.ceil((auc.endAt-(Date.now()+(typeof SRVOFF==='undefined'?0:SRVOFF)))/1000));
+function aucTimer(){   // 瀏覽器端每 0.2 秒更新倒數（不重畫整個畫面）
+  if(!auc)return;const e=$('#auc_t'),b=$('#auc_b');if(!e)return;
+  const ms=Math.max(0,auc.endAt-(Date.now()+(typeof SRVOFF==='undefined'?0:SRVOFF)));
+  e.textContent=Math.ceil(ms/1000);if(b)b.style.width=(ms/AUC_MS*100).toFixed(1)+'%';
+}
+function aucModal(){
+  const a=auc,t=T[a.id],me=typeof ME==='number'?ME:-1,mp=P[me];
+  const isSeller=me===a.seller,isLeader=me===a.leader;
+  let btn;
+  if(!mp||!mp.alive||(typeof away==='function'&&away()))btn='<div class="hint">你目前無法競標</div>';
+  else if(isSeller)btn='<div class="hint">你是賣方，等待其他玩家競標…</div>';
+  else if(isLeader)btn='<div class="hint">你目前領先中，倒數結束沒人加價就是你的</div>';
+  else if(mp.cash<a.price+AUC_STEP)btn=`<button class="big" disabled>現金不足（需 ${money(a.price+AUC_STEP)}）</button>`;
+  else btn=`<button class="big" onclick="aucBid()">競標 +${money(AUC_STEP)}</button>`;
+  return `<div class="md" style="z-index:9"><div class="box"><b>🔨 土地拍賣</b>
+    <p>${landDet(a.id)}<br>賣方：<b style="color:${C[a.seller]}">${pn(a.seller)}</b></p>
+    <p>底價 ${money(a.base)}<br>目前價格 <b style="font-size:20px">${money(a.price)}</b>　領先：${a.leader>=0?`<b style="color:${C[a.leader]}">${pn(a.leader)}</b>`:'<span style="opacity:.6">尚無</span>'}</p>
+    <div style="background:var(--bd);border-radius:6px;height:10px;overflow:hidden"><div id="auc_b" style="height:100%;background:var(--accent);width:${(aucLeft()*1000/AUC_MS*100).toFixed(1)}%"></div></div>
+    <p>無人加價則成交，倒數 <b id="auc_t">${aucLeft()}</b> 秒｜已加價 <b>${a.count}</b> 次</p>
+    ${btn}
+    <div style="font-size:12px;margin-top:6px;opacity:.8">每次加價 +${money(AUC_STEP)}，並重新倒數 ${AUC_MS/1000} 秒；倒數內沒人再加價，最後加價者得標。全程無人競標則由銀行以底價收購。</div>
+  </div></div>`;
 }
 function render(){
   const p=P[turn],t=T[p.pos];
@@ -863,6 +919,6 @@ function render(){
     <button onclick="reset()">重來</button></div>`;
   $('#sd').innerHTML=head+(phase==='over'?histChart():'')+pls+stk+`<div class="lrow"><div class="box" id="log">${logs.join('<br>')}</div><div class="box" id="mini">${miniSvg()}</div></div>`;
   mfxPlay();
-  $('#md').innerHTML=cardShow?cardModal():alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
+  $('#md').innerHTML=auc?aucModal():cardShow?cardModal():alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
 }
 const CARDS=buildCards();

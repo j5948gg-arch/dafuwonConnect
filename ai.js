@@ -1,15 +1,16 @@
 var AI_LOT = 99;   // AI 自己的單筆下單量（策略參數，不是遊戲規則；遊戲本身單次買賣已無上限）
 // 伺服器專用，不會傳給瀏覽器。與 engine.js 在同一個環境內執行。
-const MODAL_FN = { card: ['cardOk'], offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'] };
+const MODAL_FN = { card: ['cardOk'], offer: ['offerAccept', 'offerDecline', 'offerCancel'], ask: ['askPick', 'askSkip'], alloc: ['allocOk'], need: ['sellStock', 'sellEnough', 'sellLand', 'confirmNeed', 'cancelNeed'], auc: ['aucBid'] };
 const ALL_MODAL_FN = [].concat(...Object.values(MODAL_FN));
 
 // 玩家送來的動作先在這裡驗證，再呼叫引擎函式
 function safeAct(fn, a, ex) {
   if (phase === 'over' || !Array.isArray(a)) return;
   const int = (v) => Number.isInteger(v), reg = (r) => RK.includes(r);
-  const m = cardShow ? 'card' : offer ? 'offer' : ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
+  const m = auc ? 'auc' : cardShow ? 'card' : offer ? 'offer' : ask ? 'ask' : alloc ? 'alloc' : need ? 'need' : '';
   if (m ? !MODAL_FN[m].includes(fn) : ALL_MODAL_FN.includes(fn)) return;
   const who = ex && ex.who;   // 由伺服器填入的座位編號（不是玩家自己送的）
+  if (fn === 'aucBid') return aucBid(who);   // 拍賣：任何人（賣方除外，由 aucBid 判斷）都可以競標
   if (fn === 'offerAccept' || fn === 'offerDecline') { if (!offer || who !== offer.to) return; }
   else if (fn === 'offerCancel') { if (!offer || who !== offer.from) return; }
   else if (who !== turn) return;
@@ -47,7 +48,7 @@ function safeAct(fn, a, ex) {
 
 // AI（也用來代打離線太久的玩家）：每次呼叫只做一個動作
 function aiStep() {
-  if (phase === 'over' || busy) return;
+  if (phase === 'over' || busy || auc) return;   // 拍賣進行中：等結算
   if (offer) return offer.from === turn ? offerCancel() : undefined; // 代打中的玩家有交易還沒結案：取消
   if (cardShow) return cardOk();   // AI（或代打）直接確認翻到的牌
   const i = turn, p = P[i], t = T[p.pos], pick1 = (a) => a[Math.random() * a.length | 0];
@@ -81,6 +82,21 @@ function aiStep() {
   }
   if (t.type === 'stock' && !upUsed && aiTrade()) return;
   return endTurn();
+}
+
+// 拍賣：AI（含暫離代打）決定要不要競標。出價上限＝這塊地對自己的價值，同區持有越多越想要；補齊獨佔、或擋下對手的獨佔會出更高
+function aucMax(i, t) {
+  const reg = T.filter((x) => x.type === 'land' && x.region === t.region), v = landVal(t);
+  const mine = reg.filter((x) => owner[x.id] === i).length;
+  if (mine === reg.length - 1) return v * 1.8 + 2000;                            // 補齊獨佔
+  if (P.some((q, k) => k !== i && q.alive && reg.filter((x) => owner[x.id] === k).length === reg.length - 1)) return v * 1.4 + 1500;   // 擋下對手差一塊的獨佔
+  return v * (1.1 + 0.08 * mine) + 1000;                                         // 一般土地：有過路費收入，願意付略高於底價
+}
+function aiAuction(i) {
+  if (!auc || i === auc.seller || i === auc.leader || !P[i].alive) return;
+  if (Math.random() > 0.3) return;   // 隨機反應時間（約 1～3 秒內出手），不要每次都秒搶
+  const next = auc.price + AUC_STEP;
+  if (next <= aucMax(i, T[auc.id]) && P[i].cash - next >= 5000) aucBid(i);
 }
 
 // 股市交易：每區最多一次，有餘裕就買；回傳 true 表示這次動作了
