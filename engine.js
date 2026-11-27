@@ -356,7 +356,7 @@ function cardBox(){
 // 依目前地圖算出畫面大小。換地圖時（瀏覽器端）要再呼叫一次。
 function relayout(){const B=MAP.B;VW=PAD*2+W+(B.x1-B.x0)*SX;VH=PAD*2+H+(B.y1-B.y0)*SY;}
 relayout();
-const IP={stock:{x:0,y:0,w:480,h:132},hold:{x:0,y:0,w:480,h:132}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
+const IP={stock:{x:0,y:0,w:480,h:90},hold:{x:0,y:0,w:480,h:90}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
 let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
 const rOn=r=>RSHOW[r]!==false;
