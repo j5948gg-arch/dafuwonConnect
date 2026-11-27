@@ -15,7 +15,7 @@ const pnA=i=>pn(i)+(AWAY[i]?'（AI代打）':'');
 
 let C=MAP.PALETTE.map(p=>p.c);   // 各玩家代表色（連線時由房間內的選色覆蓋）
 const ink=()=>'#fff'; // 代表色色塊上的文字一律白色
-let VW=0,VH=0,PNL=null;   // 畫面大小與股價圖／持股表的位置：依目前地圖由 relayout() 算出
+let VW=0,VH=0;   // 棋盤畫面大小：依目前地圖由 relayout() 算出
 const SX=108,SY=94,W=100,H=80,PAD=10;
 const cx=t=>PAD+W/2+(t.x-MAP.B.x0)*SX, cy=t=>PAD+H/2+(MAP.B.y1-t.y)*SY;   // 座標 → 畫面位置（依地圖範圍置中）
 const T=MAP.TILES, RK=Object.keys(MAP.REGIONS), RN=r=>MAP.REGIONS[r].name, IM=MAP.IMPACT, $=s=>document.querySelector(s);
@@ -346,30 +346,16 @@ function cardBox(){
   const p=P[turn],can=phase==='act'&&!need&&!ask&&!alloc&&!cardShow&&!flipUsed&&T[p.pos].type==='gem';
   if(can&&(ME<0||ME===turn))   // 輪到自己翻牌：翻牌區直接蓋在地圖上，不必另外往下捲
     return `<div class="cov"><div class="box"><b>翻牌</b>　<span class="hint">請點選一張牌（翻牌後才能結束回合）</span><div class="cg">${cardCells(true)}</div><div style="margin-top:6px;font-size:12px">橫向連線（同一排）每多一張，獎金多 100</div></div></div>`;
-  if(!can&&!CARD_OPEN)return `<div style="margin-top:8px"><button class="nw" onclick="toggleCards()">查看翻牌區</button></div>`;
+  if(!can&&!CARD_OPEN)return `<div style="margin:8px 6px 0 0;display:inline-block"><button class="nw" onclick="toggleCards()">查看翻牌區</button></div>`;
   return `<div class="box" style="margin-top:8px"><b>翻牌區</b>${can?'':' <button class="nw" onclick="toggleCards()" style="margin:0 0 0 6px;padding:2px 10px">收起</button>'}（${can?'<span class="hint">等待'+pn(turn)+'翻牌</span>':'停在寶石格可自選一張牌翻開；橫向連線每張 +100'}）<div class="cg">${cardCells(false)}</div>${lastCard?`<div style="margin-top:4px">${lastCard}</div>`:''}</div>`;
 }
 
 
-/* ---------- 股市折線圖（地圖上半區空白處）與持有數（地圖下半區空白處）：直接畫在地圖 SVG 裡，跟著地圖縮放，不會壓到格子 ---------- */
-// 依目前地圖算出畫面大小，以及股價圖（top）與持有數（bot）的位置。換地圖時（瀏覽器端）要再呼叫一次。
-//  panels='center'：畫在地圖中間的空白處（x 在「第二欄左緣 ~ 倒數第二欄右緣」之間，夾在外圈上下列與中線格之間）。
-//  panels='below'：地圖中間放不下（例如愛心）：在棋盤下方左右並排，高度與 center 版相同。
-function relayout(){
-  const B=MAP.B,gw=PAD*2+W+(B.x1-B.x0)*SX,gh=PAD*2+H+(B.y1-B.y0)*SY;
-  if(MAP.panels==='heart'){   // 愛心：內部空白處分左右兩欄（各 200 寬）。左欄＝股價（上）＋持股（下）；右欄＝樂透（上）＋休息資訊（下）
-    const colL=c=>PAD+(c-B.x0)*SX,rowT=r=>PAD+r*SY,w=SX+W-8,hT=2*SY+H-4,hB=SY+H-4;
-    const lx=colL(2)+4,rx=colL(5)+4,yT=rowT(2)+2,yB=rowT(5)+2;   // 第 2~4 列放大框、第 5~6 列放小框；左欄佔第 2~3 欄、右欄佔第 5~6 欄
-    PNL={stock:{x:lx,y:yT,w,h:hT},hold:{x:lx,y:yB,w,h:hB},lotto:{x:rx,y:yT,w,h:hT},info:{x:rx,y:yB,w,h:hB}};VW=gw;VH=gh;
-  }else if(MAP.panels==='below'){
-    const ph=182,gap=8,pw=(gw-PAD*2-gap)/2;
-    PNL={top:{x:PAD,y:gh,w:pw,h:ph},bot:{x:PAD+pw+gap,y:gh,w:pw,h:ph}};VW=gw;VH=gh+ph+PAD;
-  }else{
-    const x0=cx({x:-2})-W/2+4,x1=cx({x:2})+W/2-4;
-    PNL={top:{x:x0,y:cy({y:3})+H/2+8,w:x1-x0,h:(cy({y:0})-H/2-12)-(cy({y:3})+H/2+8)},bot:{x:x0,y:cy({y:0})+H/2+12,w:x1-x0,h:(cy({y:-3})-H/2-8)-(cy({y:0})+H/2+12)}};VW=gw;VH=gh;
-  }
-}
+/* ---------- 棋盤大小；股價圖與持有數改放右下角資訊區（#mini，可切換），不再畫在地圖裡 ---------- */
+// 依目前地圖算出畫面大小。換地圖時（瀏覽器端）要再呼叫一次。
+function relayout(){const B=MAP.B;VW=PAD*2+W+(B.x1-B.x0)*SX;VH=PAD*2+H+(B.y1-B.y0)*SY;}
 relayout();
+const IP={stock:{x:0,y:0,w:SX+W-8,h:2*SY+H-4},hold:{x:0,y:0,w:SX+W-8,h:SY+H-4}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
 let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
 const rOn=r=>RSHOW[r]!==false;
@@ -378,35 +364,6 @@ const allR=()=>{RSHOW={};render();};
 const RCOL={africa:'#c98a00',oceania:'#1e88e5',asia:'#e53935',america:'#2e9d4f',europe:'#8e44ad'};
 const panelBg=(p,title)=>`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="8" fill="var(--panel)" stroke="var(--bd)" stroke-width="1.5" opacity=".96"/><text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">${title}</text>`;
 
-function klineSvg(p){
-  const si=KSER.indexOf(KSEL),isI=KSEL==='idx',fm=v=>isI?v.toFixed(1):String(Math.round(v));
-  const full=(kl||[]).map(r=>r[si]).concat(kc?[kc[si]]:[]),N=26,n=Math.min(N,full.length),off=full.length-n;
-  let g=panelBg(p,'K線（每輪）');
-  g=g.replace(/<text[^>]*>K線（每輪）<\/text>/,`<text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">K線・${isI?'加權指數':RN(KSEL)}</text>`);
-  // 選擇要看哪一檔
-  KSER.slice().reverse().forEach((k,j)=>{const x=p.x+p.w-8-(j+1)*44+4,on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${p.y+4}" width="40" height="17" rx="8" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.2"/><text x="${x+20}" y="${p.y+16}" font-size="11" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
-  if(!n)return g+`<text x="${p.x+p.w/2}" y="${p.y+p.h/2}" text-anchor="middle" font-size="13" fill="var(--fg)">尚無資料</text>`;
-  const cur=kc?kNow()[si]:null,cs=full.slice(off).map((c,j,a)=>j===a.length-1&&cur!=null?[c[0],Math.max(c[1],cur),Math.min(c[2],cur),cur,c[4]]:c);   // 最後一根＝進行中的這一輪，收盤即時＝現在的價格
-  const L=p.x+44,Rr=p.x+p.w-10,Tp=p.y+28,Bt=p.y+118,Vt=p.y+126,Vb=p.y+158,step=(Rr-L)/N,bw=Math.max(4,step*.58);
-  const lo0=Math.min(...cs.map(c=>c[2])),hi0=Math.max(...cs.map(c=>c[1])),pad=Math.max(isI?1:2,(hi0-lo0)*.08),lo=lo0-pad,hi=hi0+pad;
-  const Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1)),vmax=Math.max(1,...cs.map(c=>c[4])),X=j=>L+step*(j+.5);
-  for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--fg)">${fm(v)}</text>`;}
-  g+=`<line x1="${L}" x2="${Rr}" y1="${Vb}" y2="${Vb}" stroke="var(--line)"/><text x="${L-4}" y="${Vb}" font-size="10" text-anchor="end" fill="var(--fg)">量</text>`;
-  cs.forEach((c,j)=>{
-    const up=c[3]>=c[0],col=up?'#e04b4b':'#2aa86a',live=off+j===full.length-1&&kc,x=X(j),yo=Y(c[0]),yc=Y(c[3]);
-    g+=`<line x1="${x}" x2="${x}" y1="${Y(c[1])}" y2="${Y(c[2])}" stroke="${col}" stroke-width="1.6"/><rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}" ${live?'fill-opacity=".55" stroke-dasharray="2 2"':''} stroke="${col}"/>`;
-    const vh=(Vb-Vt)*c[4]/vmax;if(vh>0)g+=`<rect x="${x-bw/2}" y="${Vb-vh}" width="${bw}" height="${vh}" fill="${col}" opacity=".55"/>`;
-    const rn=off+j+1;if(j%4===0||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-6}" font-size="10" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
-  });
-  // 白色即時價格走向線：連起每根 K 棒的收盤價，最右端就是現在的價格（下方加一層深色描邊，淺色背景上也看得到）
-  const wl=cs.map((c,j)=>X(j).toFixed(1)+','+Y(c[3]).toFixed(1)).join(' ');
-  if(cs.length>1)g+=`<polyline points="${wl}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="4.4" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${wl}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  const last=cs[cs.length-1];
-  g+=`<circle cx="${X(cs.length-1)}" cy="${Y(last[3])}" r="4" fill="#fff" stroke="#000" stroke-opacity=".55" stroke-width="1.5"/>`;
-  g+=`<text x="${L+4}" y="${Tp+10}" font-size="10" fill="var(--fg)">開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
-  g+=`<line x1="${Rr-96}" x2="${Rr-80}" y1="${Tp+7}" y2="${Tp+7}" stroke="#000" stroke-opacity=".35" stroke-width="4.4" stroke-linecap="round"/><line x1="${Rr-96}" x2="${Rr-80}" y1="${Tp+7}" y2="${Tp+7}" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><text x="${Rr-4}" y="${Tp+10}" font-size="10" text-anchor="end" fill="var(--fg)">即時 ${fm(last[3])}</text>`;
-  return g;
-}
 function chestSvg(){
   if(!RULES.chest||chest<0||pot<=0)return '';
   const t=T[chest],x=cx(t),y=cy(t);
@@ -414,37 +371,7 @@ function chestSvg(){
   const ring=`<rect x="${-W/2-4}" y="${-H/2-4}" width="${W+8}" height="${H+8}" rx="13" fill="none" stroke="#ffd54a" stroke-width="4" stroke-dasharray="9 6" class="chestring"/>`;   // 把寶箱所在的那一格框起來
   return `<g transform="translate(${x},${y})" style="pointer-events:none">${ring}<g class="chest"><circle r="34" fill="#ffd54a" opacity=".28"/><ellipse cx="0" cy="22" rx="26" ry="5" fill="#000" opacity=".25"/><rect x="-24" y="-4" width="48" height="26" rx="4" fill="#8a5a2b" stroke="#4a2f12" stroke-width="2"/><path d="M-24 -4v-8a24 16 0 0 1 48 0v8z" fill="#b07a36" stroke="#4a2f12" stroke-width="2"/><rect x="-24" y="2" width="48" height="5" fill="#ffd54a" opacity=".9"/><rect x="-4" y="-14" width="8" height="30" fill="#ffd54a" opacity=".9"/><circle cx="0" cy="8" r="5" fill="#fff3b0" stroke="#4a2f12" stroke-width="1.5"/><g transform="translate(0,-30)"><rect x="-34" y="-11" width="68" height="20" rx="10" fill="#222" opacity=".88"/><text y="4" font-size="12" font-weight="800" text-anchor="middle" fill="#ffd54a">${money(pot)}</text></g></g></g>`;
 }
-function stockChartSvg(p){
-  const all=(shist||[]).slice(-40).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
-  const L=p.x+36,Rr=p.x+p.w-156,Tp=p.y+26,Bt=p.y+p.h-22,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
-  const X=k=>n<2?L:L+(Rr-L)*k/(n-1),Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1));
-  let g=panelBg(p,'股價走勢（每位玩家結束回合記錄一點）');
-  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="11" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
-  const step=Math.max(1,Math.ceil((n-1)/8));
-  for(let k=0;k<n;k++)if(k%step===0||k===n-1)g+=`<text x="${X(k)}" y="${p.y+p.h-7}" font-size="11" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
-  g+=vis.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.5" fill="${RCOL[r]}"/>`).join('');
-  const prev=n>=2?all[n-2]:stock;
-  g+=`<text class="nw" onclick="allR()" x="${p.x+p.w-10}" y="${p.y+16}" font-size="11" text-anchor="end" fill="var(--accent)" style="cursor:pointer">全部顯示</text><text x="${p.x+p.w-146}" y="${p.y+30}" font-size="10" fill="var(--fg)" opacity=".6">點區域名稱可顯示／隱藏</text>`;
-  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,y=p.y+46+k*28,x=p.x+p.w-146,on=rOn(r);
-    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x-4}" y="${y-13}" width="142" height="26" rx="5" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><rect x="${x}" y="${y-9}" width="10" height="10" rx="5" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="2"/><text x="${x+15}" y="${y}" font-size="12" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="10"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+15}" y="${y+10}" font-size="10" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text></g>`;}).join('');
-  return g;
-}
-const chgSvg=r=>{const pv=shist&&shist.length?shist[shist.length-1]:stock,d=stock[r]-(pv[r]??stock[r]);return d?`<tspan font-size="10" font-weight="700" fill="${d>0?'#e04b4b':'#2aa86a'}"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:'';};   // 與上一位玩家結束回合時相比，漲了／跌了多少
-function holdSvg(p,trading){
-  const np_=P.length,cols=3+np_,x0=p.x+10,cw=(p.w-20)/cols,rh=(p.h-30)/6;
-  let g=panelBg(p,'股市持有數（張）');
-  const cell=(c,r,txt,o='')=>`<text x="${x0+(c===0?0:c*cw+cw/2-(c>0?0:0))}" y="${p.y+30+r*rh+rh*.68}" font-size="13" ${c===0?'':'text-anchor="middle"'} ${o.includes('fill=')?'':'fill="var(--fg)"'} ${o}>${txt}</text>`;
-  const hd=['區域','股價','費×',...P.map((_,i)=>'P'+(i+1))];
-  if(trading)g+=`<rect x="${x0+(3+turn)*cw}" y="${p.y+28}" width="${cw}" height="${rh*6}" fill="var(--accent)" opacity=".35"/>`;
-  hd.forEach((h,c)=>{g+=cell(c,0,h,c>=3?`font-weight="700" fill="${C[c-3]}"`:'font-weight="700"');});
-  g+=`<line x1="${x0}" x2="${p.x+p.w-10}" y1="${p.y+30+rh}" y2="${p.y+30+rh}" stroke="var(--line)"/>`;
-  RK.forEach((r,k)=>{const row=k+1;
-    g+=`<rect x="${x0}" y="${p.y+30+row*rh+rh*.25}" width="9" height="9" rx="4" fill="${RCOL[r]}"/><text x="${x0+14}" y="${p.y+30+row*rh+rh*.68}" font-size="13" fill="var(--fg)">${RK.indexOf(r)+1}區 ${RN(r)}</text>`;
-    g+=cell(1,row,`<tspan font-weight="700">${stock[r]}</tspan>${chgSvg(r)}`)+cell(2,row,((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2));
-    P.forEach((q,i)=>{g+=cell(3+i,row,q.st[r],trading&&i===turn?'font-weight="700"':'');});});
-  return g;
-}
-/* ---------- 愛心地圖的四個專屬顯示框（寬 200：左＝股價＋持股、右＝樂透＋休息資訊），字級比大地圖版小但維持可讀 ---------- */
+/* ---------- 股價圖、K 線、持有數（寬 200 的精簡版，放在右下角資訊區） ---------- */
 const pnS=(i,n)=>{const s=String(NAMES[i]||'玩家'+(i+1));return esc(s.length>n?s.slice(0,n-1)+'…':s);};   // 擠在小框裡用的短玩家名
 function stockChartSvgC(p){
   const all=(shist||[]).slice(-30).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
@@ -502,35 +429,6 @@ function holdSvgC(p,trading){
   });
   return g;
 }
-function lottoSvg(p){
-  const lw=lotto.last?lotto.last.w:-1,sel=(ME<0||ME===turn)&&lottoCan()?LSEL:[];
-  let g=panelBg(p,'🎟️ 樂透');
-  g+=`<text x="${p.x+p.w-8}" y="${p.y+16}" font-size="11" text-anchor="end" fill="var(--fg)" opacity=".8">第 ${lotto.period} 期</text>`;
-  g+=`<text x="${p.x+p.w/2}" y="${p.y+39}" font-size="18" font-weight="800" text-anchor="middle" fill="var(--fg)"><tspan font-size="11" font-weight="600" opacity=".7">獎金 </tspan>${money(lotto.pot)}</text>`;
-  g+=`<text x="${p.x+p.w/2}" y="${p.y+55}" font-size="10.5" text-anchor="middle" fill="var(--fg)" opacity=".85">${lottoLeftTxt()}｜每號 ${LOTTO_PRICE} 元</text>`;
-  const gx=p.x+8,gy=p.y+64,cw=(p.w-16)/7,ch=25;
-  for(let n=1;n<=LOTTO_N;n++){
-    const c=(n-1)%7,r=(n-1)/7|0,x=gx+c*cw+1,y=gy+r*ch+1,o=lotto.nums[n],s=sel.includes(n);
-    g+=`<rect x="${x}" y="${y}" width="${cw-2}" height="${ch-2}" rx="4" fill="${o!==undefined?C[o]:s?'var(--accent)':'var(--bd)'}" ${s?'stroke="var(--fg)" stroke-width="2"':n===lw?'stroke="#d9a900" stroke-width="2" stroke-dasharray="3 2"':''}/><text x="${x+(cw-2)/2}" y="${y+ch/2+3}" font-size="11" font-weight="700" text-anchor="middle" fill="${o!==undefined?'#fff':s?'#222':'var(--fg)'}">${n}</text>`;
-  }
-  const L=lotto.last;
-  g+=`<text x="${p.x+p.w/2}" y="${p.y+p.h-8}" font-size="10" text-anchor="middle" fill="var(--fg)" opacity=".85">${L?`上期開出 ${L.w}：${L.by>=0?pnS(L.by,5)+' 中獎 '+money(L.prize):'無人中獎'}`:'首次開獎：第 '+LOTTO_EVERY+' 輪結束'}</text>`;
-  return g;
-}
-function infoSvg(p){
-  const rs=P.map((_,i)=>i).filter(resting),nn=rs.length>2?3:5;
-  let g=panelBg(p,'💤 休息格');
-  g+=rs.length?`<text x="${p.x+10}" y="${p.y+34}" font-size="11.5" fill="var(--fg)">${rs.map(i=>`<tspan fill="${C[i]}" font-weight="700">■${pnS(i,nn)}</tspan>`).join(' ')} 休息中</text><text x="${p.x+10}" y="${p.y+49}" font-size="11" font-weight="700" fill="var(--fg)">其土地免付過路費</text>`
-    :`<text x="${p.x+10}" y="${p.y+34}" font-size="11.5" fill="var(--fg)" opacity=".7">目前沒有人在休息</text>`;
-  g+=`<text x="${p.x+10}" y="${p.y+66}" font-size="9.5" fill="var(--fg)" opacity=".65">停在休息格期間，別人踩到你的</text><text x="${p.x+10}" y="${p.y+78}" font-size="9.5" fill="var(--fg)" opacity=".65">土地免付過路費；離開即恢復。</text>`;
-  g+=`<line x1="${p.x+8}" x2="${p.x+p.w-8}" y1="${p.y+90}" y2="${p.y+90}" stroke="var(--line)"/><text x="${p.x+10}" y="${p.y+107}" font-size="11.5" font-weight="700" fill="var(--fg)">🎟️ 樂透持有（個）</text>`;
-  P.forEach((q,i)=>{const x=p.x+10+(i%2)*92,y=p.y+125+(i>>1)*17;g+=`<circle cx="${x+4}" cy="${y-4}" r="4" fill="${C[i]}"/><text x="${x+12}" y="${y}" font-size="11" fill="var(--fg)" ${q.alive?'':'opacity=".4"'}>${pnS(i,3)} <tspan font-weight="700">${lottoMine(i).length}</tspan></text>`;});
-  const mine=ME>=0?lottoMine(ME):[];
-  if(mine.length)g+=`<text x="${p.x+10}" y="${p.y+p.h-6}" font-size="10" fill="var(--fg)" opacity=".85">我：${mine.slice(0,7).join('、')}${mine.length>7?'…':''}</text>`;
-  return g;
-}
-const heartPanels=trading=>(RULES.kline?klineSvgC(PNL.stock):stockChartSvgC(PNL.stock))+holdSvgC(PNL.hold,trading)+(hasLotto()?lottoSvg(PNL.lotto):'')+infoSvg(PNL.info);
-
 const chgTxt=r=>chg[r]?` <small style="color:${chg[r]>0?'#e04b4b':'#2aa86a'}">${chg[r]>0?'▲':'▼'}${Math.abs(chg[r])}</small>`:'';
 function costTxt(r){
   const p=P[turn],q=Math.max(1,qty[r]|0),B=buyQuote(r,q),c=B.total,S=sellQuote(r,Math.min(q,p.st[r]));
@@ -809,6 +707,20 @@ const lottoRand1=()=>{const f=lottoFree().filter(n=>!LSEL.includes(n));if(f.leng
 const lottoClear=()=>{LSEL=[];render();};
 const lottoSkip=()=>{LSKIP=landSeq;render();};
 const lottoOk=()=>{if(LSEL.length)lottoBuy(LSEL.slice());};   // 瀏覽器端 lottoBuy 會被 online.js 換成送給伺服器
+let LOTTO_OPEN=false;   // 樂透資訊平常收起；玩家自己按「查看樂透」才展開（只影響自己的畫面，與翻牌區相同）
+const toggleLotto=()=>{LOTTO_OPEN=!LOTTO_OPEN;render();};
+function lottoInfoBox(){
+  if(typeof lotto==='undefined'||!lotto||!hasLotto())return '';
+  if(!LOTTO_OPEN)return `<div style="margin:8px 6px 0 0;display:inline-block"><button class="nw" onclick="toggleLotto()">🎟️ 查看樂透</button></div>`;
+  const L=lotto.last,lw=L?L.w:-1,mine=ME>=0?lottoMine(ME):[];
+  const cells=Array.from({length:LOTTO_N},(_,k)=>{const n=k+1,o=lotto.nums[n],ol=n===lw?'outline:2px dashed #d9a900;':'';
+    return o!==undefined?`<div class="cd on" style="${ol}background:${C[o]};color:${ink(C[o])}" title="${esc(NAMES[o]||'玩家'+(o+1))}">${n}<small>P${o+1}</small></div>`:`<div class="cd" style="${ol}">${n}</div>`;}).join('');
+  const cnt=P.map((q,i)=>`<span style="${q.alive?'':'opacity:.4'}"><span class="sw" style="background:${C[i]}"></span>${pn(i)} <b>${lottoMine(i).length}</b></span>`).join('　');
+  return `<div class="box" style="margin-top:8px"><b>🎟️ 樂透</b> <button class="nw" onclick="toggleLotto()" style="margin:0 0 0 6px;padding:2px 10px">收起</button>　第 ${lotto.period} 期｜獎金 <b>${money(lotto.pot)}</b>｜${lottoLeftTxt()}｜每號 ${money(LOTTO_PRICE)} 元
+    <div class="cg">${cells}</div>
+    <div style="margin-top:4px;font-size:13px">${L?`上期（第 ${L.period} 期）開出 <b>${L.w}</b>：${L.by>=0?pn(L.by)+' 中獎 '+money(L.prize):'無人中獎'}`:'首次開獎：第 '+LOTTO_EVERY+' 輪結束'}</div>
+    <div style="margin-top:4px;font-size:13px">持有（個）：${cnt}${mine.length?`<br>我的號碼：${mine.join('、')}`:''}</div></div>`;
+}
 function lottoBox(){   // 輪到自己、停在樂透格：蓋在地圖上的選號視窗（比照翻牌區，不必往下捲）
   if(typeof lotto==='undefined'||!lotto||!(ME<0||ME===turn)||!lottoCan()||LSKIP===landSeq)return '';
   if(LSEL_SEQ!==landSeq){LSEL=[];LSEL_SEQ=landSeq;}
@@ -906,8 +818,8 @@ function arrow(from,to,active){
 }
 function tileSvg(t){
   const x=cx(t)-W/2,y=cy(t)-H/2;
-  let fill='#e6e6e6',sub='',sub2='',icon='',badge='';
-  if(t.type==='land'){fill=MAP.REGIONS[t.region].color;const ow=owner[t.id]!==undefined;sub=ow?RN(t.region):`${RN(t.region)}｜地價 ${money(t.price)}`;sub2=ow?(resting(owner[t.id])?'💤 免費':money(tollOf(t))):'';
+  let fill='#e6e6e6',sub='',sub2='',icon='',badge='',mark='';
+  if(t.type==='land'){fill=MAP.REGIONS[t.region].color;const ow=owner[t.id]!==undefined;sub=ow?RN(t.region):`${RN(t.region)}｜地價 ${money(t.price)}`;const zz=ow&&resting(owner[t.id]);sub2=ow&&!zz?money(tollOf(t)):'';if(zz)mark=`<text class="rz" x="${cx(t)}" y="${y+71}" font-size="24" font-weight="800" fill="#4b2fa3" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle" style="pointer-events:none">休</text>`;
     badge=(l=>`<rect x="${x+4}" y="${y+4}" width="22" height="19" rx="5" fill="${LVC[l]}" stroke="#fff" stroke-width="1.5"/><text x="${x+15}" y="${y+18}" font-size="14" font-weight="800" fill="${l===3?'#222':'#fff'}" text-anchor="middle">${MAP.LEVELS[l]}</text>`)(lv[t.id]||0);}
   if(t.type==='gem'){fill=MAP.GEMS[t.gem].color;sub=t.region?RN(t.region):'特殊';icon='💎';}
   if(t.type==='stock'){fill='#d4dae2';icon='📈';sub='可交易股票';}
@@ -922,7 +834,7 @@ function tileSvg(t){
   return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="9" fill="${fill}" stroke="${cur?C[turn]:'#8a8a82'}" stroke-width="${cur?4:1.5}"/>
    <text x="${cx(t)}" y="${y+31}" font-size="${t.name.length>4?12:15}" font-weight="700" fill="${tc}" text-anchor="middle">${icon} ${t.name}</text>
    <text x="${cx(t)}" y="${y+43}" font-size="11" fill="${tc}" text-anchor="middle" opacity=".85">${sub}</text>
-   <text x="${cx(t)}" y="${y+60}" font-size="17" font-weight="800" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sub2}</text>${badge}${flag}`;
+   <text x="${cx(t)}" y="${y+60}" font-size="17" font-weight="800" fill="#000" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sub2}</text>${mark}${badge}${flag}`;
 }
 
 /* ---------- 擲骰動畫（約 1.5 秒；所有玩家都看得到） ---------- */
@@ -934,6 +846,16 @@ function rollFx(){
     if(left<=0){clearInterval(ROLL_T);ROLL_T=0;render();return;}
     if(e)e.textContent=DICE_FACES[left<300?Math.max(0,(dice||1)-1):Math.random()*6|0]; // 最後 0.3 秒停在真正的點數
   },80);
+}
+/* ---------- 右下角資訊區：小地圖／股價／持有數，玩家自己切換（只影響自己的畫面） ---------- */
+let MTAB='map';
+const MTABS=[['map','小地圖'],['stock','股價'],['hold','持有數']];
+const setMTab=k=>{MTAB=k;render();};
+function miniBox(trading){
+  const tabs='<div class="mtabs">'+MTABS.map(([k,n])=>`<button class="nw${MTAB===k?' on':''}" onclick="setMTab('${k}')">${n}</button>`).join('')+'</div>';
+  const cv=(p,g)=>`<svg viewBox="0 0 ${p.w} ${p.h}">${g}</svg>`;
+  const body=MTAB==='stock'?cv(IP.stock,RULES.kline?klineSvgC(IP.stock):stockChartSvgC(IP.stock)):MTAB==='hold'?cv(IP.hold,holdSvgC(IP.hold,trading)):miniSvg();
+  return tabs+`<div class="mbody ${MTAB==='stock'||MTAB==='hold'?'':'map'}">${body}</div>`;
 }
 /* ---------- 小地圖（只標示玩家位置，不含文字） ---------- */
 function miniSvg(){
@@ -1035,11 +957,11 @@ function render(){
   if(choices)arrows=choices.map(to=>arrow(p.pos,to,true)).join('');
   else if(phase==='roll'){const o=MAP.options(p.pos,p.prev,true);if(o.length>1)arrows=o.map(to=>arrow(p.pos,to,false)).join('');}
   if(!$('#bd svg'))$('#bd').innerHTML=`<svg viewBox="0 0 ${VW} ${VH}"><g id="gl"></g><g id="gk"></g><g id="ga"></g></svg><div id="cb"></div>`;
-  $('#ga').innerHTML=arrows;$('#cb').innerHTML=cardBox()+lottoBox();updateTokens();
+  $('#ga').innerHTML=arrows;$('#cb').innerHTML=cardBox()+lottoInfoBox()+lottoBox();updateTokens();
   if($('#cb .cov')){if(!FLIP_SHOWN){FLIP_SHOWN=true;$('#bd').scrollIntoView({behavior:'smooth',block:'start'});}}else FLIP_SHOWN=false;
 
   const trading=(phase==='act'||(phase==='move'&&extraOn))&&!need&&((t.type==='stock'&&!upUsed)||extraOn);
-  $('#gl').innerHTML=lines+(MAP.panels==='heart'?heartPanels(trading):(RULES.kline?klineSvg(PNL.top):stockChartSvg(PNL.top))+holdSvg(PNL.bot,trading))+T.map(tileSvg).join('')+chestSvg()+skullSvg();
+  $('#gl').innerHTML=lines+T.map(tileSvg).join('')+chestSvg()+skullSvg();
   let act='';
   if(phase==='over'){
     const ord=[winner,...P.map((_,i)=>i).filter(i=>i!==winner).sort((a,b)=>assets(b)-assets(a))];
@@ -1075,7 +997,7 @@ function render(){
   const head=`<div class="box">輪到：<b style="color:${C[turn]}">${pnA(turn)}</b>　<span class="dice">🎲 ${dice||'-'}</span>${dz}<br>${act}</div>`;
   const gemTxt=q=>MAP.GEM_KEYS.map(k=>`<span style="color:${q.gems[k]?MAP.GEMS[k].color:'#999'};font-weight:${q.gems[k]?700:400}">◆${MAP.GEMS[k].name}</span>`).join(' ')+(q.shield?` 🛡×${q.shield}`:'');
   const pls=P.map((q,i)=>{const A=assets(i),hi=A>=MAP.WIN_ASSETS;return `<div class="box pl${i===turn?' on':''}" style="border-left-color:${C[i]};${q.alive?'':'opacity:.45'}"><img class="pp" src="${picUrl(i)}" alt="${MAP.PIC_NAMES[PIC[i]]||''}"><b>${pnA(i)}</b>${i===ME?'（你）':''}${q.alive?'':'（出局）'}　Lv.${q.level}｜${nm(q.pos)}｜來向：${nm(q.prev)}<br>現金 ${money(q.cash)}｜總資產 ${hi?`<span style="background:#333;color:#ffd21f;font-weight:700;padding:0 5px;border-radius:4px">${money(A)}</span>`:money(A)}<br>${gemTxt(q)}<br>地：${lands(i).map(x=>x.name+'(<b style="color:'+LVC[lv[x.id]||0]+'">'+MAP.LEVELS[lv[x.id]||0]+'</b>)').join('、')||'無'}${RULES.tax?`<br>每輪土地稅預估 ${money(taxOf(i)+aidOf(i))}${RULES.aid?`（含扶貧 ${money(aidOf(i))}）`:''}`:''}${hi&&phase!=='over'&&i===turn?'<br><b style="color:#d9a900">已達 '+money(MAP.WIN_ASSETS)+'，經過或停留起點即獲勝</b>':''}${tradeBtn(i)}</div>`}).join('');
-  const stk=`<div class="box"><b>股市</b>${RULE_DEFS.filter(d=>RULES[d.k]).map(d=>` <span class="tag">${d.name}</span>`).join('')}　<span style="font-size:12px">股價走勢與各人持有數在地圖中間；每區每人持股上限 ${MAXH} 股，單次買賣不限張數</span>`+
+  const stk=`<div class="box"><b>股市</b>${RULE_DEFS.filter(d=>RULES[d.k]).map(d=>` <span class="tag">${d.name}</span>`).join('')}　<span style="font-size:12px">股價走勢與各人持有數在右下角資訊區（可切換）；每區每人持股上限 ${MAXH} 股，單次買賣不限張數</span>`+
     (RULES.tax?`<div style="margin-top:4px">🧰 彩池 <b>${money(pot)}</b>（${!RULES.chest?'未開啟「彩池寶箱」，彩池只會累積':chest>=0?'寶箱在 <b>'+tileTag(chest)+'</b>'+(chestRegion(chest)?'（'+RN(chestRegion(chest))+'）':'')+'，經過可領 '+CHEST_PASS*100+'%、停下領 '+CHEST_STOP*100+'%，停下時'+(chestRegion(chest)?'除'+RN(chestRegion(chest))+'外':'')+'其餘地區股價 +'+CHEST_BOOST*100+'%':pot>0?'下一輪出現':'目前沒有彩池'}）</div>`:'')+
     (RULES.aid?`<div style="margin-top:4px">🤝 扶貧基金 <b>${money(aidPot||0)}</b>（每輪課土地過路費合計的 ${AID_RATE*100}%；第 ${Math.ceil(roundNo/AID_EVERY)*AID_EVERY} 輪結束時發給總資產最低的玩家）</div>`:'')+
     (RULES.skull?`<div style="margin-top:4px">💀 骷髏${skull>=0?'在 <b>'+tileTag(skull)+'</b>'+(chestRegion(skull)?'（'+RN(chestRegion(skull))+'，停在那格該區股價 −'+SKULL_DROP*100+'%）':'（白格，沒有效果，只會換位置）'):'暫時沒有位置'}</div>`:'')+
@@ -1084,7 +1006,7 @@ function render(){
   const ctl=`<div class="box">玩家數 <select onchange="np=+this.value;reset()">${[1,2,3,4].map(n=>`<option ${n===np?'selected':''}>${n}</option>`).join('')}</select>
     指定點數（測試） <select onchange="force=this.value">${['0','1','2','3','4','5','6'].map(v=>`<option value="${v}" ${v===force?'selected':''}>${v==='0'?'隨機':v}</option>`).join('')}</select>
     <button onclick="reset()">重來</button></div>`;
-  $('#sd').innerHTML=head+(phase==='over'?histChart():'')+pls+stk+`<div class="lrow"><div class="box" id="log">${logs.join('<br>')}</div><div class="box" id="mini">${miniSvg()}</div></div>`;
+  $('#sd').innerHTML=head+(phase==='over'?histChart():'')+pls+stk+`<div class="lrow"><div class="box" id="log">${logs.join('<br>')}</div><div class="box" id="mini">${miniBox(trading)}</div></div>`;
   mfxPlay();
   $('#md').innerHTML=auc?aucModal():cardShow?cardModal():alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
 }
