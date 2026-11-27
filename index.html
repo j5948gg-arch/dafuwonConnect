@@ -13,7 +13,7 @@ h1{font-size:18px;margin:2px 0 8px}
 .wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
 .board{flex:3 1 560px;max-width:880px;min-width:0;position:relative}   /* 棋盤優先吃寬度（上限 880px），中間的小表格才看得清楚 */
 svg{width:100%;height:auto;display:block}
-.side{flex:1 1 300px;min-width:280px}
+.side{flex:1 1 400px;min-width:300px}
 .box{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:14px}
 .pl{border-left:6px solid;}
 .pl.on{outline:2px solid var(--fg)}
@@ -23,10 +23,13 @@ button:disabled{opacity:.45;cursor:default}
 .dice{font-size:32px;font-weight:700}
 .hint{color:var(--accent);font-weight:700}
 #log{font-size:12px;overflow:auto;line-height:1.6}
-.lrow{display:flex;gap:8px;align-items:flex-start}.lrow>.box{min-width:0;margin-bottom:8px}
-#log{flex:2 1 0;height:184px}#mini{flex:3 1 0;padding:4px;overflow:hidden;height:184px;box-sizing:border-box}   /* 右下角資訊區：上方三個分頁（小地圖／股價／持有數），下方是內容 */
+.lrow{display:flex;gap:8px;align-items:stretch}.lrow>.box{min-width:0;margin-bottom:8px}
+.prow{display:flex;gap:8px;align-items:stretch}.logcol{flex:2 1 0;min-width:0;position:relative;min-height:184px;margin-bottom:8px}.pcol{flex:3 1 0;min-width:0}
+.logcol>#log{position:absolute;inset:0;margin:0;overflow:auto;box-sizing:border-box}   /* 文字欄寬度同原本，高度跟著右邊玩家資訊 */
+#mm{flex:2 1 0;display:flex;align-items:center;justify-content:center;padding:4px;overflow:hidden}#mm svg{display:block;width:100%;height:auto}
+#mini{flex:3 1 0;padding:4px;overflow:hidden}   /* 右下角：股價／持有數兩個分頁，內容填滿整個框 */
 .mtabs{display:flex;gap:4px;margin-bottom:4px}.mtabs button{flex:1;margin:0;padding:3px 0;font-size:12px}.mtabs button.on{background:var(--accent);color:#222;border-color:transparent;font-weight:700}
-.mbody{height:150px}.mbody svg{display:block;width:100%;height:100%;max-height:150px}.mbody.map svg{max-height:140px}
+.mbody svg{display:block;width:100%;height:auto}
 .rz{animation:rz 2.6s ease-in-out infinite}@keyframes rz{0%,100%{opacity:.1}50%{opacity:.8}}   /* 休息中玩家的土地：若隱若現的「休」字 */
 .dz{display:inline-block;font-size:34px;line-height:1;margin-left:8px;vertical-align:middle;animation:dzb .32s ease-in-out infinite}
 @keyframes dzb{0%,100%{transform:translateY(0) rotate(-14deg)}50%{transform:translateY(-14px) rotate(16deg)}}

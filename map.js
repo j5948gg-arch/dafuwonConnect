@@ -92,7 +92,36 @@
     ],
     tris: [],
   };
-  const DEFS = { classic: CLASSIC, heart: HEART };
+
+  // ======== 地圖三：箭矢（29 格） ========
+  // 8×7 方格圖（欄 0~7、列 0~6，列 0 在最上面；程式內 y = 6 − 列）。起點在中間，連出左右兩個迴圈：
+  //   左邊是箭尾（12 格含起點、含休），右邊是箭頭（18 格含起點、含股市與兩個樂透）。起點有四個方向（走到那裡要選方向）。
+  const ay = (row) => 6 - row;
+  const AR_START = START(3, ay(3));
+  const AR_TAIL = [   // 箭尾：起點 → 帛琉 → 紐西蘭 → 寶石 → 斐濟 → 澳洲 → 休 → 美國 → 墨西哥 → 寶石 → 巴西 → 加拿大 → 回起點
+    L('帛琉', 2, ay(2), 'oceania', 1700), L('紐西蘭', 2, ay(1), 'oceania', 1550), G('ruby', 1, ay(1), null),
+    L('斐濟', 0, ay(1), 'oceania', 1550), L('澳洲', 0, ay(2), 'oceania', 1800),
+    REST(0, ay(3)),
+    L('美國', 0, ay(4), 'america', 2000), L('墨西哥', 0, ay(5), 'america', 1350), G('sapphire', 1, ay(5), null),
+    L('巴西', 2, ay(5), 'america', 1300), L('加拿大', 2, ay(4), 'america', 1450),
+  ];
+  const AR_HEAD = [   // 箭頭：起點 → 中國 → 日本 → 寶石 → 印度 → 泰國 → 樂透 → 英國 → 法國 → 股市 → 德國 → 義大利 → 樂透 → 南非 → 埃及 → 寶石 → 肯亞 → 奈及利亞 → 回起點
+    L('中國', 4, ay(2), 'asia', 1650), L('日本', 4, ay(1), 'asia', 1900), G('emerald', 5, ay(1), null),
+    L('印度', 5, ay(0), 'asia', 1400), L('泰國', 6, ay(0), 'asia', 1950), LOT(7, ay(0)),
+    L('英國', 7, ay(1), 'europe', 1850), L('法國', 7, ay(2), 'europe', 1600),
+    S(6, ay(3)),
+    L('德國', 7, ay(4), 'europe', 1750), L('義大利', 7, ay(5), 'europe', 1500), LOT(7, ay(6)),
+    L('南非', 6, ay(6), 'africa', 1250), L('埃及', 5, ay(6), 'africa', 1800), G('topaz', 5, ay(5), null),
+    L('肯亞', 4, ay(5), 'africa', 1450), L('奈及利亞', 4, ay(4), 'africa', 1400),
+  ];
+  const loopLinks = (a) => a.map((t, i) => [t.x, t.y, a[(i + 1) % a.length].x, a[(i + 1) % a.length].y]);
+  const ARROW = {
+    id: 'arrow', name: '箭矢', desc: '29 格：起點在中間，左邊是箭尾、右邊是箭頭，兩個迴圈相連；起點有四個方向，含兩個樂透、休、股市', bounds: { x0: 0, x1: 7, y0: 0, y1: 6 }, panels: 'center',
+    tiles: [AR_START, ...AR_TAIL, ...AR_HEAD],
+    links: [...loopLinks([AR_START, ...AR_TAIL]), ...loopLinks([AR_START, ...AR_HEAD])],
+    tris: [],
+  };
+  const DEFS = { classic: CLASSIC, heart: HEART, arrow: ARROW };
 
   // ---- 台灣地名版：就地改地區名稱與土地名稱（依各區土地在地圖定義中的順序對應）----
   const TW = {

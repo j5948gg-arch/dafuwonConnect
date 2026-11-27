@@ -355,7 +355,7 @@ function cardBox(){
 // 依目前地圖算出畫面大小。換地圖時（瀏覽器端）要再呼叫一次。
 function relayout(){const B=MAP.B;VW=PAD*2+W+(B.x1-B.x0)*SX;VH=PAD*2+H+(B.y1-B.y0)*SY;}
 relayout();
-const IP={stock:{x:0,y:0,w:SX+W-8,h:190},hold:{x:0,y:0,w:SX+W-8,h:158}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
+const IP={stock:{x:0,y:0,w:300,h:172},hold:{x:0,y:0,w:300,h:172}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
 let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
 const rOn=r=>RSHOW[r]!==false;
@@ -373,9 +373,9 @@ function chestSvg(){
 }
 /* ---------- 股價圖、K 線、持有數（寬 200 的精簡版，放在右下角資訊區） ---------- */
 const pnS=(i,n)=>{const s=String(NAMES[i]||'玩家'+(i+1));return esc(s.length>n?s.slice(0,n-1)+'…':s);};   // 擠在小框裡用的短玩家名
-function stockChartSvgC(p){
+function stockChartSvgC(p){   // 左邊折線圖、右邊一欄圖例（可點選顯示／隱藏）；畫布 300×172，填滿整個框
   const all=(shist||[]).slice(-30).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
-  const L=p.x+30,Rr=p.x+p.w-8,Tp=p.y+24,Bt=p.y+104,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
+  const L=p.x+30,Rr=p.x+p.w-112,Tp=p.y+28,Bt=p.y+p.h-22,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
   const X=k=>n<2?L:L+(Rr-L)*k/(n-1),Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1));
   let g=panelBg(p,'股價走勢');
   g+=`<text class="nw" onclick="allR()" x="${p.x+p.w-8}" y="${p.y+16}" font-size="11" text-anchor="end" fill="var(--accent)" style="cursor:pointer">全部顯示</text>`;
@@ -384,52 +384,51 @@ function stockChartSvgC(p){
   for(let k=0;k<n;k++)if(k===n-1||(k%step===0&&n-1-k>=step*.75))g+=`<text x="${X(k)}" y="${Bt+14}" font-size="10" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
   g+=vis.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.2" fill="${RCOL[r]}"/>`).join('');
   const prev=n>=2?all[n-2]:stock;
-  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,x=p.x+4+(k%2)*98,y=p.y+124+(k>>1)*22,on=rOn(r);
-    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x}" y="${y}" width="94" height="20" rx="5" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><circle cx="${x+9}" cy="${y+10}" r="4" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="1.6"/><text x="${x+17}" y="${y+9}" font-size="11" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="9"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+17}" y="${y+18}" font-size="8.5" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text></g>`;}).join('');
+  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,x=p.x+p.w-106,y=p.y+24+k*29,on=rOn(r);
+    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x}" y="${y}" width="100" height="26" rx="5" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><circle cx="${x+9}" cy="${y+13}" r="4" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="1.6"/><text x="${x+17}" y="${y+11}" font-size="11" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="9"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text><text x="${x+17}" y="${y+22}" font-size="9" fill="var(--fg)" opacity=".7">開局起 ${pc>=0?'+':''}${pc}%</text></g>`;}).join('');
   return g;
 }
-function klineSvgC(p){
+function klineSvgC(p){   // 左邊 K 線＋成交量、右邊一欄切換按鈕
   const si=KSER.indexOf(KSEL),isI=KSEL==='idx',fm=v=>isI?v.toFixed(1):String(Math.round(v));
   const full=(kl||[]).map(r=>r[si]).concat(kc?[kc[si]]:[]),N=20,n=Math.min(N,full.length),off=full.length-n;
   let g=panelBg(p,'K線・'+(isI?'加權指數':RN(KSEL)));
-  KSER.forEach((k,j)=>{const x=p.x+5+(j%3)*65,y=p.y+24+(j>=3?19:0),on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${y}" width="62" height="16" rx="8" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.2"/><text x="${x+31}" y="${y+12}" font-size="10" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
-  if(!n)return g+`<text x="${p.x+p.w/2}" y="${p.y+p.h/2+20}" text-anchor="middle" font-size="13" fill="var(--fg)">尚無資料</text>`;
+  KSER.forEach((k,j)=>{const x=p.x+p.w-84,y=p.y+24+j*24,on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${y}" width="78" height="20" rx="10" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.2"/><text x="${x+39}" y="${y+14}" font-size="11" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
+  if(!n)return g+`<text x="${p.x+(p.w-90)/2}" y="${p.y+p.h/2+6}" text-anchor="middle" font-size="13" fill="var(--fg)">尚無資料</text>`;
   const cur=kc?kNow()[si]:null,cs=full.slice(off).map((c,j,a)=>j===a.length-1&&cur!=null?[c[0],Math.max(c[1],cur),Math.min(c[2],cur),cur,c[4]]:c);
-  const L=p.x+34,Rr=p.x+p.w-6,Tp=p.y+86,Bt=p.y+186,Vt=p.y+194,Vb=p.y+230,step=(Rr-L)/N,bw=Math.max(3,step*.58);
+  const L=p.x+34,Rr=p.x+p.w-92,Tp=p.y+38,Bt=p.y+p.h-56,Vt=p.y+p.h-50,Vb=p.y+p.h-20,step=(Rr-L)/N,bw=Math.max(3,step*.58);
   const lo0=Math.min(...cs.map(c=>c[2])),hi0=Math.max(...cs.map(c=>c[1])),pad=Math.max(isI?1:2,(hi0-lo0)*.08),lo=lo0-pad,hi=hi0+pad;
   const Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1)),vmax=Math.max(1,...cs.map(c=>c[4])),X=j=>L+step*(j+.5);
   const last=cs[cs.length-1];
-  g+=`<text x="${p.x+8}" y="${p.y+78}" font-size="9.5" fill="var(--fg)">開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
+  g+=`<text x="${p.x+8}" y="${p.y+31}" font-size="9.5" fill="var(--fg)">開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
   for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="9" text-anchor="end" fill="var(--fg)">${fm(v)}</text>`;}
   g+=`<line x1="${L}" x2="${Rr}" y1="${Vb}" y2="${Vb}" stroke="var(--line)"/><text x="${L-4}" y="${Vb}" font-size="9" text-anchor="end" fill="var(--fg)">量</text>`;
   cs.forEach((c,j)=>{
     const up=c[3]>=c[0],col=up?'#e04b4b':'#2aa86a',live=off+j===full.length-1&&kc,x=X(j),yo=Y(c[0]),yc=Y(c[3]);
     g+=`<line x1="${x}" x2="${x}" y1="${Y(c[1])}" y2="${Y(c[2])}" stroke="${col}" stroke-width="1.4"/><rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}" ${live?'fill-opacity=".55" stroke-dasharray="2 2"':''} stroke="${col}"/>`;
     const vh=(Vb-Vt)*c[4]/vmax;if(vh>0)g+=`<rect x="${x-bw/2}" y="${Vb-vh}" width="${bw}" height="${vh}" fill="${col}" opacity=".55"/>`;
-    const rn=off+j+1;if((j%5===0&&j<n-2)||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-8}" font-size="9" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
+    const rn=off+j+1;if((j%5===0&&j<n-2)||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-6}" font-size="9" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
   });
   const wl=cs.map((c,j)=>X(j).toFixed(1)+','+Y(c[3]).toFixed(1)).join(' ');
   if(cs.length>1)g+=`<polyline points="${wl}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${wl}" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   g+=`<circle cx="${X(cs.length-1)}" cy="${Y(last[3])}" r="3.5" fill="#fff" stroke="#000" stroke-opacity=".55" stroke-width="1.5"/>`;
   return g;
 }
-function holdSvgC(p,trading){
-  const np_=P.length,x0=p.x+6,nw=50,pw=40,cw=(p.w-12-nw-pw)/np_,y0=p.y+22,hh=16,rh=23,pv=shist&&shist.length?shist[shist.length-1]:stock;
+function holdSvgC(p,trading){   // 區域｜股價｜各玩家持有數；畫布 300×172
+  const np_=P.length,x0=p.x+8,nw=64,pw=48,cw=(p.w-16-nw-pw)/np_,y0=p.y+24,hh=18,rh=(p.h-y0-hh-6)/5,pv=shist&&shist.length?shist[shist.length-1]:stock;
   let g=panelBg(p,'股市持有數（張）');
   if(trading)g+=`<rect x="${x0+nw+pw+turn*cw}" y="${y0}" width="${cw}" height="${hh+rh*5}" fill="var(--accent)" opacity=".35"/>`;
   g+=`<text x="${x0}" y="${y0+13}" font-size="11" font-weight="700" fill="var(--fg)">區域</text><text x="${x0+nw+pw/2}" y="${y0+13}" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">股價</text>`;
   P.forEach((_,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${y0+13}" font-size="11" font-weight="700" text-anchor="middle" fill="${C[i]}">P${i+1}</text>`;});
-  g+=`<line x1="${x0}" x2="${p.x+p.w-6}" y1="${y0+hh}" y2="${y0+hh}" stroke="var(--line)"/>`;
+  g+=`<line x1="${x0}" x2="${p.x+p.w-8}" y1="${y0+hh}" y2="${y0+hh}" stroke="var(--line)"/>`;
   RK.forEach((r,k)=>{
-    const y=y0+hh+k*rh,d=stock[r]-(pv[r]??stock[r]),m=((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2);
-    if(k)g+=`<line x1="${x0}" x2="${p.x+p.w-6}" y1="${y}" y2="${y}" stroke="var(--bd)"/>`;
-    g+=`<circle cx="${x0+4}" cy="${y+8}" r="4" fill="${RCOL[r]}"/><text x="${x0+11}" y="${y+12}" font-size="11" fill="var(--fg)">${RN(r)}</text><text x="${x0+11}" y="${y+20}" font-size="9" fill="var(--fg)" opacity=".85">費×${m}</text>`;
-    g+=`<text x="${x0+nw+pw/2}" y="${y+12}" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">${stock[r]}</text>${d?`<text x="${x0+nw+pw/2}" y="${y+22}" font-size="8.5" text-anchor="middle" fill="${d>0?'#e04b4b':'#2aa86a'}">${d>0?'▲':'▼'}${Math.abs(d)}</text>`:''}`;
-    P.forEach((q,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${y+15}" font-size="12" text-anchor="middle" fill="var(--fg)" ${q.st[r]?'':'opacity=".4"'} ${trading&&i===turn?'font-weight="700"':''}>${q.st[r]}</text>`;});
+    const y=y0+hh+k*rh,d=stock[r]-(pv[r]??stock[r]),m=tollMulOf(r);
+    if(k)g+=`<line x1="${x0}" x2="${p.x+p.w-8}" y1="${y}" y2="${y}" stroke="var(--bd)"/>`;
+    g+=`<circle cx="${x0+4}" cy="${y+9}" r="4" fill="${RCOL[r]}"/><text x="${x0+12}" y="${y+12}" font-size="12" fill="var(--fg)">${RN(r)}</text><text x="${x0+12}" y="${y+rh-4}" font-size="10" fill="var(--fg)" opacity=".85">過路費×${m}</text>`;
+    g+=`<text x="${x0+nw+pw/2}" y="${y+13}" font-size="12" font-weight="700" text-anchor="middle" fill="var(--fg)">${stock[r]}</text>${d?`<text x="${x0+nw+pw/2}" y="${y+rh-4}" font-size="9.5" text-anchor="middle" fill="${d>0?'#e04b4b':'#2aa86a'}">${d>0?'▲':'▼'}${Math.abs(d)}</text>`:''}`;
+    P.forEach((q,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${y+rh/2+5}" font-size="14" text-anchor="middle" fill="var(--fg)" ${q.st[r]?'':'opacity=".4"'} ${trading&&i===turn?'font-weight="700"':''}>${q.st[r]}</text>`;});
   });
   return g;
 }
-const tollMulOf=r=>((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2);   // 該區過路費倍率（卡牌調整×獨佔 1.2）
 const chgTxt=r=>chg[r]?` <small style="color:${chg[r]>0?'#e04b4b':'#2aa86a'}">${chg[r]>0?'▲':'▼'}${Math.abs(chg[r])}</small>`:'';
 function costTxt(r){
   const p=P[turn],q=Math.max(1,qty[r]|0),B=buyQuote(r,q),c=B.total,S=sellQuote(r,Math.min(q,p.st[r]));
@@ -849,14 +848,14 @@ function rollFx(){
   },80);
 }
 /* ---------- 右下角資訊區：小地圖／股價／持有數，玩家自己切換（只影響自己的畫面） ---------- */
-let MTAB='map';
-const MTABS=[['map','小地圖'],['stock','股價'],['hold','持有數']];
+let MTAB='stock';
+const MTABS=[['stock','股價'],['hold','持有數']];
 const setMTab=k=>{MTAB=k;render();};
 function miniBox(trading){
   const tabs='<div class="mtabs">'+MTABS.map(([k,n])=>`<button class="nw${MTAB===k?' on':''}" onclick="setMTab('${k}')">${n}</button>`).join('')+'</div>';
   const cv=(p,g)=>`<svg viewBox="0 0 ${p.w} ${p.h}">${g}</svg>`;
-  const body=MTAB==='stock'?cv(IP.stock,RULES.kline?klineSvgC(IP.stock):stockChartSvgC(IP.stock)):MTAB==='hold'?cv(IP.hold,holdSvgC(IP.hold,trading)):miniSvg();
-  return tabs+`<div class="mbody ${MTAB==='stock'||MTAB==='hold'?'':'map'}">${body}</div>`;
+  const body=MTAB==='stock'?cv(IP.stock,RULES.kline?klineSvgC(IP.stock):stockChartSvgC(IP.stock)):cv(IP.hold,holdSvgC(IP.hold,trading));
+  return tabs+`<div class="mbody">${body}</div>`;
 }
 /* ---------- 小地圖（只標示玩家位置，不含文字） ---------- */
 function miniSvg(){
@@ -872,7 +871,7 @@ function miniSvg(){
     const k=P.filter((q,j)=>q.alive&&q.pos===p.pos&&j<i).length,t=T[p.pos],x=cx(t)+off[k%4][0],y=cy(t)+off[k%4][1],me=i===turn&&phase!=='over';
     return (me?`<circle class="pulse" cx="${x}" cy="${y}" r="29" fill="none" stroke="${C[i]}" stroke-width="6"/>`:'')+`<circle cx="${x}" cy="${y}" r="${me?20:17}" fill="${C[i]}" stroke="#fff" stroke-width="5"/>`;
   }).join('');
-  return `<svg viewBox="0 0 ${VW} ${VH}" style="max-height:140px">${tiles}${dots}</svg>`;
+  return `<svg viewBox="0 0 ${VW} ${VH}">${tiles}${dots}</svg>`;
 }
 
 /* ---------- 棋子（獨立圖層：保留元素才能做移動動畫） ---------- */
@@ -1007,7 +1006,7 @@ function render(){
   const ctl=`<div class="box">玩家數 <select onchange="np=+this.value;reset()">${[1,2,3,4].map(n=>`<option ${n===np?'selected':''}>${n}</option>`).join('')}</select>
     指定點數（測試） <select onchange="force=this.value">${['0','1','2','3','4','5','6'].map(v=>`<option value="${v}" ${v===force?'selected':''}>${v==='0'?'隨機':v}</option>`).join('')}</select>
     <button onclick="reset()">重來</button></div>`;
-  $('#sd').innerHTML=head+(phase==='over'?histChart():'')+pls+stk+`<div class="lrow"><div class="box" id="log">${logs.join('<br>')}</div><div class="box" id="mini">${miniBox(trading)}</div></div>`;
+  $('#sd').innerHTML=head+(phase==='over'?histChart():'')+`<div class="prow"><div class="logcol"><div class="box" id="log">${logs.join('<br>')}</div></div><div class="pcol">${pls}</div></div>`+stk+`<div class="lrow"><div class="box" id="mm">${miniSvg()}</div><div class="box" id="mini">${miniBox(trading)}</div></div>`;
   mfxPlay();
   $('#md').innerHTML=auc?aucModal():cardShow?cardModal():alloc?allocModal():ask?askModal():need?modal():offer?offerModal():tradeUI?composeModal():'';
 }
