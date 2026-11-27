@@ -166,7 +166,7 @@
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.05, buyout: 0.02, toll: 0.02, perShare: 0.0005 };
 
-  const MAP = { id: '', B: null, panels: 'center', LIST: Object.values(DEFS).map((d) => ({ id: d.id, name: d.name, desc: d.desc })), use, setLocale, TW, REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
+  const MAP = { id: '', B: null, panels: 'center', LIST: Object.values(DEFS).map((d) => ({ id: d.id, name: d.name, desc: d.desc, bounds: d.bounds, shape: d.tiles.map((t) => ({ x: t.x, y: t.y, type: t.type })) })), use, setLocale, TW, REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
   use(typeof __MAPID === 'string' ? __MAPID : 'classic');   // 伺服器為每一局指定地圖（__MAPID）；瀏覽器預設經典，進房間後依房間設定切換
   if (typeof module !== 'undefined') module.exports = MAP;
   else window.MAP = MAP;

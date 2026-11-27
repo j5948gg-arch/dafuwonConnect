@@ -64,7 +64,7 @@ function lobbyHtml() {
        <button class="big" onclick="tx({t:'start'})" ${full ? '' : 'disabled'}>開始遊戲</button>${full ? '' : '<div style="font-size:12px">需滿 4 人才能開始，不足的位置可用 AI 補滿</div>'}`
     : '<div class="hint">等待房主開始遊戲…</div>';
   const mapBox = `<div class="box"><b>地圖</b>${isHost ? '（房主選擇）' : '（由房主決定）'}`
-    + MAP.LIST.map((d) => `<label style="display:block;margin-top:4px"><input type="radio" name="mp" ${MAP.id === d.id ? 'checked' : ''} ${isHost ? '' : 'disabled'} onchange="tx({t:'map',id:'${d.id}'})"> <b>${d.name}</b><div style="font-size:12px;margin:0 0 2px 22px">${d.desc}</div></label>`).join('') + `</div>`;
+    + MAP.LIST.map((d) => `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:4px"><input type="radio" name="mp" ${MAP.id === d.id ? 'checked' : ''} ${isHost ? '' : 'disabled'} onchange="tx({t:'map',id:'${d.id}'})"> <span style="flex:1;min-width:0"><b>${d.name}</b><div style="font-size:12px">${d.desc}</div></span>${mapShape(d)}</label>`).join('') + `</div>`;
   const rulesBox = `<div class="box"><b>特殊規則</b>${isHost ? '（房主可勾選；每一項都獨立，可任意組合）' : '（由房主決定）'}`
     + [...new Set(RULE_DEFS.map((d) => d.grp))].map((g) => `<div style="margin-top:6px;font-weight:700;font-size:12px;opacity:.7">${g}</div>`
       + RULE_DEFS.filter((d) => d.grp === g).map((d) => {
@@ -118,3 +118,11 @@ function view() {
 }
 setInterval(() => { if (typeof auc !== 'undefined' && auc) aucTimer(); }, 200);
 connect();
+
+// 大廳選地圖時的小地圖形狀預覽（只畫格子位置，不含文字）
+function mapShape(d) {
+  const B = d.bounds, u = 12, g = 2, w = (B.x1 - B.x0 + 1) * u, h = (B.y1 - B.y0 + 1) * u;
+  const col = { start: '#ff9f1a', stock: '#8a96a8', gem: '#d6457f', lotto: '#e6b800', rest: '#9b8fd0' };
+  const r = d.shape.map((t) => `<rect x="${(t.x - B.x0) * u}" y="${(B.y1 - t.y) * u}" width="${u - g}" height="${u - g}" rx="2" fill="${col[t.type] || '#999'}"/>`).join('');
+  return `<svg viewBox="-1 -1 ${w + 2} ${h + 2}" style="flex:none;width:${Math.min(84, w * 2)}px;height:auto;max-height:84px" aria-hidden="true">${r}</svg>`;
+}
