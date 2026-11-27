@@ -1,0 +1,30 @@
+# Render Blueprint：New → Blueprint 選這個 repo 即可
+# Supabase 版：帳號／存檔／積分都在 Supabase，這個服務不需要 Persistent Disk
+services:
+  - type: web
+    name: fgo-online
+    runtime: node
+    rootDir: server
+    plan: free               # 免費方案閒置約 15 分鐘會休眠（WebSocket 會斷、喚醒要等數十秒）；正式開放建議改 starter
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false          # 部署時在 Render 頁面填入
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SECRET
+        generateValue: true
+      - key: GM_USER
+        value: GM
+      - key: GM_PASS         # GM 密碼（Render 自動產生，到 Environment 頁面查看）
+        generateValue: true
+      - key: PVP_MUL
+        value: "10"
+      - key: HONOR_CAP
+        value: "500"
+      - key: TZ_OFFSET_HOURS
+        value: "8"
