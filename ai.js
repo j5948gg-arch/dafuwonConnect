@@ -38,6 +38,7 @@ function safeAct(fn, a, ex) {
     case 'sellLand': return int(a[0]) && sellLand(a[0]);
     case 'confirmNeed': return P[need.who].cash >= need.amount && confirmNeed();
     case 'closeExtra': return closeExtra();
+    case 'lottoBuy': return Array.isArray(a[0]) && lottoBuy(a[0]);
     case 'offerMake': return a.length === 4 && a.every(int) && offerMake(a[0], a[1], a[2], a[3]);
     case 'offerAccept': return offerAccept();
     case 'offerDecline': return offerDecline();
@@ -79,6 +80,10 @@ function aiStep() {
   if (t.type === 'gem' && !flipUsed) {
     const free = deck.map((d, k) => (d.by < 0 ? k : -1)).filter((k) => k >= 0);
     if (free.length) return flipAt(pick1(free));
+  }
+  if (t.type === 'lotto' && lottoCan()) {   // 樂透：現金充裕時隨機買 3~10 個號碼（至少留 12000 現金）
+    const f = lottoFree(), k = Math.min(3 + (Math.random() * 8 | 0), Math.floor((c - 12000) / LOTTO_PRICE), f.length), ns = [];
+    if (k > 0) { while (ns.length < k) ns.push(f.splice(Math.random() * f.length | 0, 1)[0]); return lottoBuy(ns); }
   }
   if (t.type === 'stock' && !upUsed && aiTrade()) return;
   return endTurn();

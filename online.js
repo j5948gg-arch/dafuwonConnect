@@ -13,12 +13,12 @@ trade = (r, s) => tx({ t: 'act', fn: 'trade', args: [r, s], q: qty[r] });
 offerMake = (to, want, give, cash) => rpc('offerMake', to, want, give, cash); offerAccept = () => rpc('offerAccept');
 offerDecline = () => rpc('offerDecline'); offerCancel = () => rpc('offerCancel');
 sellStock = (r, n) => rpc('sellStock', r, n); sellEnough = (r) => rpc('sellEnough', r); sellLand = (id) => rpc('sellLand', id); aucBid = () => rpc('aucBid');
-closeExtra = () => rpc('closeExtra');
+closeExtra = () => rpc('closeExtra'); lottoBuy = (ns) => rpc('lottoBuy', ns);
 confirmNeed = () => rpc('confirmNeed'); cancelNeed = () => rpc('cancelNeed');
 
 const setRule = (k, v) => tx({ t: 'rules', rules: { ...LRULES, [k]: v } });
 function applyState(s) {
-  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, auc, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, aidPot, chest, skull, roundNo } = s);
+  ({ P, owner, lv, inv, chg, winner, base, tollMod, landMod, traded, ask, alloc, sf, deck, upUsed, upIds, flipUsed, justBought, lastCard, stock, extraOn, turn, phase, left, dice, rollSeq, first, choices, busy, logs, need, mfx, mfxSeq, auc, offer, offerN, hist, shist, cardShow, RULES, kl, kc, pot, aidPot, chest, skull, roundNo, lotto, lottoUsed, landSeq } = s);
   applyLocale();   // 台灣地名版：依伺服器的規則切換地名
 }
 function connect() {

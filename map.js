@@ -1,6 +1,6 @@
 // 世界大富翁：地圖（可選擇）與走位規則。瀏覽器與 Node 皆可使用。
 // 座標 (x,y)：x 向右、y 向上。每張地圖定義在 DEFS：tiles（第一格必須是起點）、links（相鄰格子的座標配對）、tris（三角岔路，可省略）、
-// bounds（格子座標的範圍，畫面用來置中）、panels（股價圖／持股表放哪：'center'＝地圖中間空白處、'below'＝棋盤下方）。
+// bounds（格子座標的範圍，畫面用來置中）、panels（股價圖／持股表放哪：'center'＝地圖中間空白處、'below'＝棋盤下方、'heart'＝愛心內部兩欄：左欄股價＋持股、右欄樂透＋休息資訊）。
 (function () {
   const REGIONS = {
     africa:  { name: '非洲',   color: '#f3dfb5' },
@@ -21,6 +21,8 @@
   const G = (gem, x, y, region) => ({ name: GEMS[gem].name, x, y, type: 'gem', gem, region: null }); // 所有寶石格的標籤一律顯示「特殊」
   const BL = (name, x, y, icon, sub) => ({ name, x, y, type: 'blank', icon, sub });   // 空格（之後再加特殊玩法）：目前踩到沒有任何效果
   const START = (x, y) => ({ name: '起點', x, y, type: 'start' });
+  const LOT = (x, y) => ({ name: '樂透', x, y, type: 'lotto', icon: '🎟️', sub: '每號 500 元' });   // 樂透格：停下可選號（規則見 engine.js 的樂透區）
+  const REST = (x, y) => ({ name: '休', x, y, type: 'rest', icon: '💤', sub: '停留免收過路費' });  // 休息格：停在這格期間，自己的土地別人踩到免付過路費
 
   // ======== 地圖一：經典（27 格） ========
   const RING = [
@@ -58,31 +60,31 @@
   // ======== 地圖二：愛心（29 格） ========
   // 9×9 方格圖（欄 0~8、列 0~8，列 0 在最上面；程式內 y = 8 − 列）。
   //   外圈 24 格：沿愛心輪廓繞一圈（起點在上方凹口）；中線 5 格：由起點一路連到下方的股市。
-  //   起點與股市各有三個方向（外圈兩側＋中線），走到那裡要選方向。樂透、休：目前是空格，之後再加玩法。
+  //   起點與股市各有三個方向（外圈兩側＋中線），走到那裡要選方向。樂透、休：見 engine.js 的規則說明。
   const hy = (row) => 8 - row;
   const H_ = (col, row) => [col, hy(row)];
   const HEART_RING = [
     L('帛琉', 3, hy(1), 'oceania', 1700), L('紐西蘭', 2, hy(0), 'oceania', 1550), L('斐濟', 1, hy(1), 'oceania', 1550),
     G('ruby', 1, hy(2), null), L('澳洲', 0, hy(2), 'oceania', 1800),
-    BL('樂透', 0, hy(3), '🎟️', '尚無效果'), L('埃及', 0, hy(4), 'africa', 1800),
+    LOT(0, hy(3)), L('埃及', 0, hy(4), 'africa', 1800),
     G('emerald', 1, hy(5), null), L('肯亞', 1, hy(6), 'africa', 1450),
     L('奈及利亞', 2, hy(7), 'africa', 1400), L('南非', 3, hy(8), 'africa', 1250),
     S(4, hy(8)),
     L('美國', 5, hy(8), 'america', 2000), L('墨西哥', 6, hy(7), 'america', 1350), L('加拿大', 7, hy(6), 'america', 1450),
     G('topaz', 7, hy(5), null), L('巴西', 8, hy(4), 'america', 1300),
-    BL('樂透', 8, hy(3), '🎟️', '尚無效果'), L('泰國', 8, hy(2), 'asia', 1950),
+    LOT(8, hy(3)), L('泰國', 8, hy(2), 'asia', 1950),
     G('sapphire', 7, hy(2), null), L('印度', 7, hy(1), 'asia', 1400),
     L('日本', 6, hy(0), 'asia', 1900), L('中國', 5, hy(1), 'asia', 1650),
   ];
   const HEART_MID = [
-    L('英國', 4, hy(3), 'europe', 1850), L('法國', 4, hy(4), 'europe', 1600), BL('休', 4, hy(5), '💤', '尚無效果'),
+    L('英國', 4, hy(3), 'europe', 1850), L('法國', 4, hy(4), 'europe', 1600), REST(4, hy(5)),
     L('德國', 4, hy(6), 'europe', 1750), L('義大利', 4, hy(7), 'europe', 1500),
   ];
   const HEART_START = START(4, hy(2));
   // 順序：起點 → 外圈（由帛琉起順時針…依上面列的順序，最後回到中國再接起點）→ 中線
   const HEART_LOOP = [HEART_START, ...HEART_RING];   // 外圈首尾相接成環：…中國 → 起點 → 帛琉 → 紐西蘭…
   const HEART = {
-    id: 'heart', name: '愛心', desc: '29 格：愛心外圈＋中線；起點與股市各有三岔口；含樂透、休（暫無效果）', bounds: { x0: 0, x1: 8, y0: 0, y1: 8 }, panels: 'below',
+    id: 'heart', name: '愛心', desc: '29 格：愛心外圈＋中線；起點與股市各有三岔口；含樂透（1–49 號共用、每 10 輪開獎）與休（停留時己地免過路費）', bounds: { x0: 0, x1: 8, y0: 0, y1: 8 }, panels: 'heart',
     tiles: [HEART_START, ...HEART_RING, ...HEART_MID],
     links: [
       ...HEART_LOOP.map((t, i) => [t.x, t.y, HEART_LOOP[(i + 1) % HEART_LOOP.length].x, HEART_LOOP[(i + 1) % HEART_LOOP.length].y]),
