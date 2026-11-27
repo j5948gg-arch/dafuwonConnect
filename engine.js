@@ -356,14 +356,16 @@ function cardBox(){
 // 依目前地圖算出畫面大小。換地圖時（瀏覽器端）要再呼叫一次。
 function relayout(){const B=MAP.B;VW=PAD*2+W+(B.x1-B.x0)*SX;VH=PAD*2+H+(B.y1-B.y0)*SY;}
 relayout();
-const IP={stock:{x:0,y:0,w:480,h:90},hold:{x:0,y:0,w:480,h:90}};   // 資訊區裡股價圖／持有數的畫布大小（寬 200，字級小但維持可讀）
+const MINI_H=110;   // ★ 股價／持有數框的內容高度（像素）。要調高低只改這個數字；寬度跟著框的實際寬度，文字與間距會依高度（以 90 為基準）等比例縮放
+const miniW=()=>{const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mini');return el&&el.clientWidth>200?el.clientWidth-8:480;};
+const IP={get stock(){return{x:0,y:0,w:miniW(),h:MINI_H};},get hold(){return{x:0,y:0,w:miniW(),h:MINI_H};}};
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
 let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
 const rOn=r=>RSHOW[r]!==false;
 const toggleR=r=>{if(rOn(r)&&RK.filter(rOn).length<=1)return;RSHOW[r]=!rOn(r);render();};
 const allR=()=>{RSHOW={};render();};
 const RCOL={africa:'#c98a00',oceania:'#1e88e5',asia:'#e53935',america:'#2e9d4f',europe:'#8e44ad'};
-const panelBg=(p,title)=>`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="8" fill="var(--panel)" stroke="var(--bd)" stroke-width="1.5" opacity=".96"/><text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">${title}</text>`;
+const panelBg=(p,title)=>`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="8" fill="var(--panel)" stroke="var(--bd)" stroke-width="1.5" opacity=".96"/>${title?`<text x="${p.x+10}" y="${p.y+16}" font-size="13" font-weight="700" fill="var(--fg)">${title}</text>`:''}`;
 
 function chestSvg(){
   if(!RULES.chest||chest<0||pot<=0)return '';
@@ -374,59 +376,63 @@ function chestSvg(){
 }
 /* ---------- 股價圖、K 線、持有數（寬 200 的精簡版，放在右下角資訊區） ---------- */
 const pnS=(i,n)=>{const s=String(NAMES[i]||'玩家'+(i+1));return esc(s.length>n?s.slice(0,n-1)+'…':s);};   // 擠在小框裡用的短玩家名
-function stockChartSvgC(p){   // 左邊折線圖、右邊一欄圖例（可點選顯示／隱藏）；畫布 300×172，填滿整個框
+function stockChartSvgC(p){
+  const f=Math.min(1.5,p.h/90);   // 左邊折線圖、右邊兩欄圖例（可點選顯示／隱藏；第六格是「全部顯示」）；尺寸由 MINI_H 與框寬決定
   const all=(shist||[]).slice(-30).concat([{...stock}]),n=all.length,off=(shist||[]).length-(n-1);
-  const L=p.x+30,Rr=p.x+p.w-146,Tp=p.y+26,Bt=p.y+p.h-20,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
+  const R6=(p.h-4)/6,cols=R6>=17?1:2,LW=cols===1?136:114,L=p.x+30*f,Rr=p.x+p.w-cols*LW-14,Tp=p.y+6,Bt=p.y+p.h-16*f,vis=RK.filter(rOn),vals=all.flatMap(x=>vis.map(r=>x[r])),lo0=Math.min(...vals),hi0=Math.max(...vals),pad=Math.max(10,(hi0-lo0)*.1),lo=Math.max(0,Math.floor((lo0-pad)/10)*10),hi=Math.ceil((hi0+pad)/10)*10;
   const X=k=>n<2?L:L+(Rr-L)*k/(n-1),Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1));
-  let g=panelBg(p,'股價走勢');
-  g+=`<text class="nw" onclick="allR()" x="${p.x+p.w-8}" y="${p.y+16}" font-size="11" text-anchor="end" fill="var(--accent)" style="cursor:pointer">全部顯示</text>`;
-  for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
+  let g=panelBg(p,'');
+  for(let k=0;k<=2;k++){const v=lo+(hi-lo)*k/2;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+3*f}" font-size="${+(9*f).toFixed(1)}" text-anchor="end" fill="var(--fg)">${Math.round(v)}</text>`;}
   const step=Math.max(1,Math.ceil((n-1)/5));
-  for(let k=0;k<n;k++)if(k===n-1||(k%step===0&&n-1-k>=step*.75))g+=`<text x="${X(k)}" y="${Bt+14}" font-size="10" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
-  g+=vis.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3.2" fill="${RCOL[r]}"/>`).join('');
-  const prev=n>=2?all[n-2]:stock;
-  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,x=p.x+p.w-136,y=p.y+24+k*21,on=rOn(r);
-    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x}" y="${y}" width="130" height="19" rx="5" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><circle cx="${x+9}" cy="${y+9.5}" r="4" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="1.6"/><text x="${x+17}" y="${y+13}" font-size="11" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="9"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}<tspan font-size="9" opacity=".7"> ${pc>=0?'+':''}${pc}%</tspan></text></g>`;}).join('');
+  for(let k=0;k<n;k++)if(k===n-1||(k%step===0&&n-1-k>=step*.75))g+=`<text x="${X(k)}" y="${Bt+11*f}" font-size="${+(9*f).toFixed(1)}" text-anchor="middle" fill="var(--fg)">${k===n-1?'現':off+k}</text>`;
+  g+=vis.map(r=>`<polyline points="${all.map((x,k)=>X(k).toFixed(1)+','+Y(x[r]).toFixed(1)).join(' ')}" fill="none" stroke="${RCOL[r]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${X(n-1)}" cy="${Y(stock[r])}" r="3" fill="${RCOL[r]}"/>`).join('');
+  const prev=n>=2?all[n-2]:stock,rl=cols===1?R6:Math.min(24,(p.h-4)/3),lx=k=>p.x+p.w-cols*LW-4+(cols===1?0:(k&1)*LW),ly=k=>p.y+2+(cols===1?k:k>>1)*rl;
+  g+=RK.map((r,k)=>{const d=stock[r]-prev[r],pc=base&&base[r]?Math.round((stock[r]/base[r]-1)*100):0,x=lx(k),y=ly(k),on=rOn(r);
+    return `<g class="nw" onclick="toggleR('${r}')" style="cursor:pointer" opacity="${on?1:.4}"><rect x="${x}" y="${y}" width="${LW-4}" height="${rl-3}" rx="4" fill="${on?RCOL[r]:'none'}" fill-opacity=".13" stroke="${RCOL[r]}" stroke-width="1"/><circle cx="${x+8}" cy="${y+(rl-3)/2}" r="3.5" fill="${on?RCOL[r]:'none'}" stroke="${RCOL[r]}" stroke-width="1.5"/><text x="${x+15}" y="${y+(rl-3)/2+3.5*f}" font-size="${+(10*f).toFixed(1)}" fill="var(--fg)">${RN(r)} <tspan font-weight="700">${stock[r]}</tspan>${d?`<tspan fill="${d>0?'#e04b4b':'#2aa86a'}" font-size="${+(8.5*f).toFixed(1)}"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}<tspan font-size="${+(8.5*f).toFixed(1)}" opacity=".7"> ${pc>=0?'+':''}${pc}%</tspan></text></g>`;}).join('');
+  g+=`<text class="nw" onclick="allR()" x="${lx(5)+(LW-4)/2}" y="${ly(5)+(rl-3)/2+3.5*f}" font-size="${+(10*f).toFixed(1)}" text-anchor="middle" fill="var(--accent)" style="cursor:pointer">全部顯示</text>`;
   return g;
 }
-function klineSvgC(p){   // 左邊 K 線＋成交量、右邊一欄切換按鈕
+function klineSvgC(p){
+  const f=Math.min(1.5,p.h/90);   // 左邊 K 線＋成交量、右邊一欄切換按鈕；尺寸由 MINI_H 與框寬決定
   const si=KSER.indexOf(KSEL),isI=KSEL==='idx',fm=v=>isI?v.toFixed(1):String(Math.round(v));
   const full=(kl||[]).map(r=>r[si]).concat(kc?[kc[si]]:[]),N=20,n=Math.min(N,full.length),off=full.length-n;
-  let g=panelBg(p,'K線・'+(isI?'加權指數':RN(KSEL)));
-  KSER.forEach((k,j)=>{const x=p.x+p.w-84,y=p.y+4+j*21,on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${y}" width="78" height="18" rx="9" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.2"/><text x="${x+39}" y="${y+13}" font-size="11" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
-  if(!n)return g+`<text x="${p.x+(p.w-90)/2}" y="${p.y+p.h/2+6}" text-anchor="middle" font-size="13" fill="var(--fg)">尚無資料</text>`;
+  let g=panelBg(p,'');
+  const bh=Math.min(18,(p.h-4)/KSER.length-1);
+  KSER.forEach((k,j)=>{const x=p.x+p.w-72,y=p.y+2+j*(bh+1),on=k===KSEL;g+=`<g class="nw" onclick="setK('${k}')" style="cursor:pointer"><rect x="${x}" y="${y}" width="66" height="${bh}" rx="${bh/2}" fill="${on?'var(--accent)':'none'}" stroke="${k==='idx'?'var(--fg)':RCOL[k]}" stroke-width="1.1"/><text x="${x+33}" y="${y+bh/2+3.5*f}" font-size="${+(10*f).toFixed(1)}" text-anchor="middle" fill="${on?'#222':'var(--fg)'}" font-weight="${on?700:400}">${k==='idx'?'指數':RN(k)}</text></g>`;});
+  if(!n)return g+`<text x="${p.x+(p.w-80)/2}" y="${p.y+p.h/2+5}" text-anchor="middle" font-size="${+(12*f).toFixed(1)}" fill="var(--fg)">尚無資料</text>`;
   const cur=kc?kNow()[si]:null,cs=full.slice(off).map((c,j,a)=>j===a.length-1&&cur!=null?[c[0],Math.max(c[1],cur),Math.min(c[2],cur),cur,c[4]]:c);
-  const L=p.x+34,Rr=p.x+p.w-96,Tp=p.y+36,Bt=p.y+p.h-42,Vt=p.y+p.h-38,Vb=p.y+p.h-16,step=(Rr-L)/N,bw=Math.max(3,step*.58);
+  const L=p.x+34*f,Rr=p.x+p.w-82,Tp=p.y+16*f,Bt=p.y+p.h-28*f,Vt=p.y+p.h-26*f,Vb=p.y+p.h-12*f,step=(Rr-L)/N,bw=Math.max(3,step*.58);
   const lo0=Math.min(...cs.map(c=>c[2])),hi0=Math.max(...cs.map(c=>c[1])),pad=Math.max(isI?1:2,(hi0-lo0)*.08),lo=lo0-pad,hi=hi0+pad;
   const Y=v=>Tp+(Bt-Tp)*(1-(v-lo)/(hi-lo||1)),vmax=Math.max(1,...cs.map(c=>c[4])),X=j=>L+step*(j+.5);
   const last=cs[cs.length-1];
-  g+=`<text x="${p.x+8}" y="${p.y+31}" font-size="9.5" fill="var(--fg)">開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
-  for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+4}" font-size="9" text-anchor="end" fill="var(--fg)">${fm(v)}</text>`;}
-  g+=`<line x1="${L}" x2="${Rr}" y1="${Vb}" y2="${Vb}" stroke="var(--line)"/><text x="${L-4}" y="${Vb}" font-size="9" text-anchor="end" fill="var(--fg)">量</text>`;
+  g+=`<text x="${p.x+8}" y="${p.y+11*f}" font-size="${+(9.5*f).toFixed(1)}" fill="var(--fg)">${isI?'加權指數':RN(KSEL)}｜開${fm(last[0])} 高${fm(last[1])} 低${fm(last[2])} 收${fm(last[3])} 量${last[4]}</text>`;
+  for(let k=0;k<=2;k++){const v=lo+(hi-lo)*k/2;g+=`<line x1="${L}" x2="${Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-4}" y="${Y(v)+3*f}" font-size="${+(9*f).toFixed(1)}" text-anchor="end" fill="var(--fg)">${fm(v)}</text>`;}
+  g+=`<line x1="${L}" x2="${Rr}" y1="${Vb}" y2="${Vb}" stroke="var(--line)"/><text x="${L-4}" y="${Vb}" font-size="${+(9*f).toFixed(1)}" text-anchor="end" fill="var(--fg)">量</text>`;
   cs.forEach((c,j)=>{
     const up=c[3]>=c[0],col=up?'#e04b4b':'#2aa86a',live=off+j===full.length-1&&kc,x=X(j),yo=Y(c[0]),yc=Y(c[3]);
-    g+=`<line x1="${x}" x2="${x}" y1="${Y(c[1])}" y2="${Y(c[2])}" stroke="${col}" stroke-width="1.4"/><rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}" ${live?'fill-opacity=".55" stroke-dasharray="2 2"':''} stroke="${col}"/>`;
+    g+=`<line x1="${x}" x2="${x}" y1="${Y(c[1])}" y2="${Y(c[2])}" stroke="${col}" stroke-width="1.3"/><rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}" ${live?'fill-opacity=".55" stroke-dasharray="2 2"':''} stroke="${col}"/>`;
     const vh=(Vb-Vt)*c[4]/vmax;if(vh>0)g+=`<rect x="${x-bw/2}" y="${Vb-vh}" width="${bw}" height="${vh}" fill="${col}" opacity=".55"/>`;
-    const rn=off+j+1;if((j%5===0&&j<n-2)||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-3}" font-size="9" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
+    const rn=off+j+1;if((j%5===0&&j<n-2)||j===n-1)g+=`<text x="${x}" y="${p.y+p.h-2}" font-size="${+(9*f).toFixed(1)}" text-anchor="middle" fill="var(--fg)">${live?'現':rn}</text>`;
   });
   const wl=cs.map((c,j)=>X(j).toFixed(1)+','+Y(c[3]).toFixed(1)).join(' ');
-  if(cs.length>1)g+=`<polyline points="${wl}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${wl}" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  g+=`<circle cx="${X(cs.length-1)}" cy="${Y(last[3])}" r="3.5" fill="#fff" stroke="#000" stroke-opacity=".55" stroke-width="1.5"/>`;
+  if(cs.length>1)g+=`<polyline points="${wl}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${wl}" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>`;
+  g+=`<circle cx="${X(cs.length-1)}" cy="${Y(last[3])}" r="3" fill="#fff" stroke="#000" stroke-opacity=".55" stroke-width="1.5"/>`;
   return g;
 }
-function holdSvgC(p,trading){   // 區域（含過路費倍率）｜股價｜各玩家持有數；畫布 480×132，每區一行
-  const np_=P.length,x0=p.x+8,nw=138,pw=76,cw=(p.w-16-nw-pw)/np_,y0=p.y+22,hh=15,rh=(p.h-y0-hh-4)/5,pv=shist&&shist.length?shist[shist.length-1]:stock;
-  let g=panelBg(p,'股市持有數（張）');
+function holdSvgC(p,trading){
+  const f=Math.min(1.5,p.h/90);   // 區域（含過路費倍率）｜股價｜各玩家持有數；每區一行，列高由 MINI_H 決定
+  const np_=P.length,x0=p.x+8,nw=Math.min(190,p.w*.36),pw=Math.min(100,p.w*.2),cw=(p.w-16-nw-pw)/np_,y0=p.y+2,hh=14*f,rh=(p.h-y0-hh-2)/5,pv=shist&&shist.length?shist[shist.length-1]:stock,fs=Math.max(9,Math.min(15,rh-3));
+  let g=panelBg(p,'');
   if(trading)g+=`<rect x="${x0+nw+pw+turn*cw}" y="${y0}" width="${cw}" height="${hh+rh*5}" fill="var(--accent)" opacity=".35"/>`;
-  g+=`<text x="${x0}" y="${y0+12}" font-size="11" font-weight="700" fill="var(--fg)">區域／過路費倍率</text><text x="${x0+nw+pw/2}" y="${y0+12}" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">股價</text>`;
-  P.forEach((_,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${y0+12}" font-size="11" font-weight="700" text-anchor="middle" fill="${C[i]}">P${i+1}</text>`;});
+  g+=`<text x="${x0}" y="${y0+11*f}" font-size="${+(10.5*f).toFixed(1)}" font-weight="700" fill="var(--fg)">區域／過路費倍率</text><text x="${x0+nw+pw/2}" y="${y0+11*f}" font-size="${+(10.5*f).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--fg)">股價</text>`;
+  P.forEach((_,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${y0+11*f}" font-size="${+(10.5*f).toFixed(1)}" font-weight="700" text-anchor="middle" fill="${C[i]}">P${i+1}</text>`;});
   g+=`<line x1="${x0}" x2="${p.x+p.w-8}" y1="${y0+hh}" y2="${y0+hh}" stroke="var(--line)"/>`;
   RK.forEach((r,k)=>{
-    const y=y0+hh+k*rh,d=stock[r]-(pv[r]??stock[r]),m=tollMulOf(r),ty=y+rh/2+4;
+    const y=y0+hh+k*rh,d=stock[r]-(pv[r]??stock[r]),m=tollMulOf(r),ty=y+rh/2+fs*.35;
     if(k)g+=`<line x1="${x0}" x2="${p.x+p.w-8}" y1="${y}" y2="${y}" stroke="var(--bd)"/>`;
-    g+=`<circle cx="${x0+4}" cy="${y+rh/2}" r="4" fill="${RCOL[r]}"/><text x="${x0+12}" y="${ty}" font-size="12" fill="var(--fg)">${RN(r)} <tspan font-size="11" opacity=".85">過路費×${m}</tspan></text>`;
-    g+=`<text x="${x0+nw+pw/2}" y="${ty}" font-size="12" font-weight="700" text-anchor="middle" fill="var(--fg)">${stock[r]}${d?`<tspan font-size="9.5" fill="${d>0?'#e04b4b':'#2aa86a'}"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text>`;
-    P.forEach((q,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${ty}" font-size="13" text-anchor="middle" fill="var(--fg)" ${q.st[r]?'':'opacity=".4"'} ${trading&&i===turn?'font-weight="700"':''}>${q.st[r]}</text>`;});
+    g+=`<circle cx="${x0+4}" cy="${y+rh/2}" r="3.5" fill="${RCOL[r]}"/><text x="${x0+12}" y="${ty}" font-size="${fs}" fill="var(--fg)">${RN(r)} <tspan font-size="${fs-2}" opacity=".85">過路費×${m}</tspan></text>`;
+    g+=`<text x="${x0+nw+pw/2}" y="${ty}" font-size="${fs}" font-weight="700" text-anchor="middle" fill="var(--fg)">${stock[r]}${d?`<tspan font-size="${fs-2.5}" fill="${d>0?'#e04b4b':'#2aa86a'}"> ${d>0?'▲':'▼'}${Math.abs(d)}</tspan>`:''}</text>`;
+    P.forEach((q,i)=>{g+=`<text x="${x0+nw+pw+(i+.5)*cw}" y="${ty}" font-size="${fs}" text-anchor="middle" fill="var(--fg)" ${q.st[r]?'':'opacity=".4"'} ${trading&&i===turn?'font-weight="700"':''}>${q.st[r]}</text>`;});
   });
   return g;
 }
