@@ -15,8 +15,9 @@ const pnA=i=>pn(i)+(AWAY[i]?'（AI代打）':'');
 
 let C=MAP.PALETTE.map(p=>p.c);   // 各玩家代表色（連線時由房間內的選色覆蓋）
 const ink=()=>'#fff'; // 代表色色塊上的文字一律白色
-const SX=108,SY=94,W=100,H=80,PAD=10,VW=PAD*2+W+6*SX,VH=PAD*2+H+6*SY;
-const cx=t=>PAD+W/2+(t.x+3)*SX, cy=t=>PAD+H/2+(3-t.y)*SY;
+let VW=0,VH=0,PNL=null;   // 畫面大小與股價圖／持股表的位置：依目前地圖由 relayout() 算出
+const SX=108,SY=94,W=100,H=80,PAD=10;
+const cx=t=>PAD+W/2+(t.x-MAP.B.x0)*SX, cy=t=>PAD+H/2+(MAP.B.y1-t.y)*SY;   // 座標 → 畫面位置（依地圖範圍置中）
 const T=MAP.TILES, RK=Object.keys(MAP.REGIONS), RN=r=>MAP.REGIONS[r].name, IM=MAP.IMPACT, $=s=>document.querySelector(s);
 const START_CASH=40000, MAXH=999, money=n=>n.toLocaleString('en-US');
 let P,owner,lv,inv,chg,winner,base,tollMod,landMod,traded,ask,alloc,sf,deck,upUsed,upIds,flipUsed,justBought,lastCard,stock,turn,phase,left,dice,rollSeq=0,first,choices,busy,logs,need,qty,np=2,force='0';
@@ -350,8 +351,20 @@ function cardBox(){
 
 
 /* ---------- 股市折線圖（地圖上半區空白處）與持有數（地圖下半區空白處）：直接畫在地圖 SVG 裡，跟著地圖縮放，不會壓到格子 ---------- */
-// 空白區：x 在「第二欄左緣 ~ 倒數第二欄右緣」之間；y 夾在外圈上下列與中線格之間（外圈左右兩欄與兩個岔路斜線都不會碰到）
-const PNL=(()=>{const x0=cx({x:-2})-W/2+4,x1=cx({x:2})+W/2-4;return{top:{x:x0,y:cy({y:3})+H/2+8,w:x1-x0,h:(cy({y:0})-H/2-12)-(cy({y:3})+H/2+8)},bot:{x:x0,y:cy({y:0})+H/2+12,w:x1-x0,h:(cy({y:-3})-H/2-8)-(cy({y:0})+H/2+12)}};})();
+// 依目前地圖算出畫面大小，以及股價圖（top）與持有數（bot）的位置。換地圖時（瀏覽器端）要再呼叫一次。
+//  panels='center'：畫在地圖中間的空白處（x 在「第二欄左緣 ~ 倒數第二欄右緣」之間，夾在外圈上下列與中線格之間）。
+//  panels='below'：地圖中間放不下（例如愛心）：在棋盤下方左右並排，高度與 center 版相同。
+function relayout(){
+  const B=MAP.B,gw=PAD*2+W+(B.x1-B.x0)*SX,gh=PAD*2+H+(B.y1-B.y0)*SY;
+  if(MAP.panels==='below'){
+    const ph=182,gap=8,pw=(gw-PAD*2-gap)/2;
+    PNL={top:{x:PAD,y:gh,w:pw,h:ph},bot:{x:PAD+pw+gap,y:gh,w:pw,h:ph}};VW=gw;VH=gh+ph+PAD;
+  }else{
+    const x0=cx({x:-2})-W/2+4,x1=cx({x:2})+W/2-4;
+    PNL={top:{x:x0,y:cy({y:3})+H/2+8,w:x1-x0,h:(cy({y:0})-H/2-12)-(cy({y:3})+H/2+8)},bot:{x:x0,y:cy({y:0})+H/2+12,w:x1-x0,h:(cy({y:-3})-H/2-8)-(cy({y:0})+H/2+12)}};VW=gw;VH=gh;
+  }
+}
+relayout();
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
 let RSHOW={};   // 折線圖要顯示哪幾區（只影響自己的畫面；預設全顯示）
 const rOn=r=>RSHOW[r]!==false;
@@ -563,7 +576,7 @@ const RULE_DEFS=[
   {k:'chest',grp:'土地',name:'彩池寶箱',need:'tax',desc:'彩池以寶箱出現在隨機空格；經過寶箱可領彩池的 30%、停在寶箱上可領 80%（剩下的留在彩池）。任一種領取後，寶箱立刻換位置。若是停留於該格，除該格所在地區外，其餘地區股價 +10%。需先開啟「土地稅與彩池」。'},
   {k:'skull',grp:'事件',name:'骷髏',desc:'骷髏出現在隨機空格；停在那格，該格所在地區股價 −20%，之後骷髏換到別格。白格（起點、股市、黃寶石，不屬於任何地區）沒有效果，只會換位置。'},
 ];
-const tileTag=id=>nm(id)+(nm(id)==='股市'?(T[id].y>0?'（上方）':'（下方）'):'');   // 兩個股市同名：標示上方／下方
+const tileTag=id=>nm(id)+(nm(id)==='股市'&&T.filter(t=>t.type==='stock').length>1?(T[id].y>0?'（上方）':'（下方）'):'');   // 有兩個股市同名時：標示上方／下方
 const chestRegion=id=>(id>=0&&T[id]&&T[id].region)||null;   // 寶箱所在格的地區（起點、股市、黃寶石不屬於任何地區）
 const mBuy=x=>IM.perShare*x*(1+x/BUY_K), mSell=x=>Math.min(.6,IM.perShare*x*(1+x/SELL_K));   // 累計衝擊：買越多推得越高、賣越多跌得越深（超線性）
 function buyQuote(r,q){
@@ -749,6 +762,7 @@ function tileSvg(t){
   if(t.type==='gem'){fill=MAP.GEMS[t.gem].color;sub=t.region?RN(t.region):'特殊';icon='💎';}
   if(t.type==='stock'){fill='#d4dae2';icon='📈';sub='可交易股票';}
   if(t.type==='start'){fill='#fff';icon='🏁';}
+  if(t.type==='blank'){fill='#f1eee6';icon=t.icon||'';sub=t.sub||'';}   // 空格（樂透、休…：目前沒有效果）
   const tc=(t.type==='gem'&&t.gem!=='topaz')?'#fff':'#222';
   const here=P.map((p,i)=>p.alive&&p.pos===t.id?i:-1).filter(i=>i>=0);
   const o=owner[t.id],flag=o===undefined?'':`<circle cx="${x+W-11}" cy="${y+11}" r="8" fill="${C[o]}" stroke="#fff" stroke-width="1.5"/><text x="${x+W-11}" y="${y+15}" font-size="10" font-weight="700" fill="${ink(C[o])}" text-anchor="middle">${o+1}</text>`;

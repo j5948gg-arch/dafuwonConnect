@@ -15,20 +15,25 @@ const rooms = {}, byToken = {};
 process.on('uncaughtException', (e) => console.error(e));
 
 // 每個房間一個獨立的遊戲引擎（與瀏覽器共用 map.js / engine.js）
-function newEngine() {
+function newEngine(mapId) {
   const safeTimeout = (f, ms) => setTimeout(() => { try { f(); } catch (e) { console.error(e); } }, ms);
-  const ctx = vm.createContext({ setTimeout: safeTimeout, document: { querySelector: () => ({}) } });
+  const ctx = vm.createContext({ setTimeout: safeTimeout, document: { querySelector: () => ({}) }, __MAPID: mapId });   // __MAPID：這一局用哪張地圖（map.js 讀取）
   vm.runInContext('var window=this;', ctx);
   SRC_FILES.map(rd).forEach((s) => vm.runInContext(s, ctx));
   vm.runInContext('render=function(){};', ctx);
   return ctx;
 }
 const ev = (r, code) => vm.runInContext(code, r.ctx);
+// 可選地圖清單（直接從 map.js 讀，新增地圖不必改這裡）
+function mapList() {
+  const c = vm.createContext({}); vm.runInContext('var window=this;', c); vm.runInContext(rd('map.js'), c);
+  return JSON.parse(vm.runInContext('JSON.stringify(MAP.LIST)', c));
+}
 
 function send(ws, o) { if (ws && ws.readyState === 1) ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
 function broadcast(r) {
   const seats = r.seats.map((s) => ({ name: s.name, ai: s.ai, pic: s.pic, color: s.color, away: !!s.away, online: s.ai || !!s.ws }));
-  r.seats.forEach((s, i) => send(s.ws, { t: 'state', now: Date.now(), code: r.code, started: r.started, rules: cleanRules(r.rules), seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
+  r.seats.forEach((s, i) => send(s.ws, { t: 'state', now: Date.now(), map: r.mapId, code: r.code, started: r.started, rules: cleanRules(r.rules), seats, host: r.seats.indexOf(r.host), you: i, s: r.snap, draw: drawInfo(r, s) }));
 }
 function notice(r, msg) { r.seats.forEach((s) => send(s.ws, { t: 'notice', msg })); }
 
@@ -116,7 +121,7 @@ function handle(ws, m) {
     let r;
     if (m.t === 'create') {
       let code; do { code = String(1000 + (Math.random() * 9000 | 0)); } while (rooms[code]);
-      r = rooms[code] = { code, seats: [], started: false, lastAI: 0, raw: '', snap: null, ctx: null, empty: 0 };
+      r = rooms[code] = { code, seats: [], started: false, mapId: 'classic', lastAI: 0, raw: '', snap: null, ctx: null, empty: 0 };
     } else {
       r = rooms[String(m.code || '').trim()];
       if (!r) return err('找不到房間');
@@ -149,6 +154,7 @@ function handle(ws, m) {
       if (r.seats.some((x) => x !== me && x.color === k)) return err('這個顏色已被其他玩家選走了');
       me.color = k; break;
     }
+    case 'map': if (host && !r.started && typeof m.id === 'string' && mapList().some((x) => x.id === m.id)) r.mapId = m.id; break;
     case 'rules': if (host && !r.started) r.rules = cleanRules(m.rules); break;
     case 'resume':
       if (!r.started || !me.away) return;
@@ -160,7 +166,7 @@ function handle(ws, m) {
       if (!host || r.started) return;
       if (r.seats.length < 4) return err('需要滿 4 人才能開始（可用 AI 補滿）');
       r.seats.sort(() => Math.random() - 0.5); // 隨機決定順序
-      r.ctx = newEngine(); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); r.ctx.__r = JSON.stringify(cleanRules(r.rules)); ev(r, 'RULES=JSON.parse(__r);PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
+      r.ctx = newEngine(r.mapId); r.ctx.__n = JSON.stringify(r.seats.map((x) => x.name)); r.ctx.__p = JSON.stringify(r.seats.map((x) => !!x.pro)); r.ctx.__r = JSON.stringify(cleanRules(r.rules)); ev(r, 'RULES=JSON.parse(__r);PRO=JSON.parse(__p);NAMES=JSON.parse(__n);np=4;reset();'); // 紀錄裡用玩家 ID
       r.started = true; r.lastAI = Date.now();
       return sync(r, true);
     case 'rematch':

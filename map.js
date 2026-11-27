@@ -1,5 +1,6 @@
-// 世界大富翁：新地圖（27 格）與走位規則。瀏覽器與 Node 皆可使用。
-// 座標 (x,y)：x 向右、y 向上，(0,0) 為起點。
+// 世界大富翁：地圖（可選擇）與走位規則。瀏覽器與 Node 皆可使用。
+// 座標 (x,y)：x 向右、y 向上。每張地圖定義在 DEFS：tiles（第一格必須是起點）、links（相鄰格子的座標配對）、tris（三角岔路，可省略）、
+// bounds（格子座標的範圍，畫面用來置中）、panels（股價圖／持股表放哪：'center'＝地圖中間空白處、'below'＝棋盤下方）。
 (function () {
   const REGIONS = {
     africa:  { name: '非洲',   color: '#f3dfb5' },
@@ -18,9 +19,10 @@
   const L = (name, x, y, region, price) => ({ name, x, y, type: 'land', region, price, toll: Math.round(price / 10) });
   const S = (x, y) => ({ name: '股市', x, y, type: 'stock' });
   const G = (gem, x, y, region) => ({ name: GEMS[gem].name, x, y, type: 'gem', gem, region: null }); // 所有寶石格的標籤一律顯示「特殊」
-  const START = { name: '起點', x: 0, y: 0, type: 'start' };
+  const BL = (name, x, y, icon, sub) => ({ name, x, y, type: 'blank', icon, sub });   // 空格（之後再加特殊玩法）：目前踩到沒有任何效果
+  const START = (x, y) => ({ name: '起點', x, y, type: 'start' });
 
-  // 外圈 22 格，順時針（左上角開始）。首尾相接成環。
+  // ======== 地圖一：經典（27 格） ========
   const RING = [
     L('印度', -3, 3, 'asia', 1400), L('中國', -2, 3, 'asia', 1650), L('日本', -1, 3, 'asia', 1900),
     S(0, 3),
@@ -33,14 +35,63 @@
     G('sapphire', -3, -2, 'america'), L('加拿大', -3, -1, 'america', 1450),
     L('泰國', -3, 1, 'asia', 1950), G('ruby', -3, 2, 'asia'),
   ];
-  // 中線 5 格，由左到右
   const CENTER = [
     L('南非', -2, 0, 'africa', 1250), L('奈及利亞', -1, 0, 'africa', 1400),
-    START,
+    START(0, 0),
     L('埃及', 1, 0, 'africa', 1800), L('肯亞', 2, 0, 'africa', 1450),
   ];
+  const CLASSIC = {
+    id: 'classic', name: '經典', desc: '27 格：外圈加一條中線，兩端是三角岔路', bounds: { x0: -3, x1: 3, y0: -3, y1: 3 }, panels: 'center',
+    tiles: [CENTER[2], ...RING, ...CENTER.filter((t) => t.type !== 'start')],
+    links: [
+      ...RING.map((t, i) => [t.x, t.y, RING[(i + 1) % RING.length].x, RING[(i + 1) % RING.length].y]),
+      ...CENTER.slice(1).map((t, i) => [CENTER[i].x, CENTER[i].y, t.x, t.y]),
+      // 中線兩端各接到外圈的兩個岔路點
+      [-2, 0, -3, 1], [-2, 0, -3, -1], [2, 0, 3, 1], [2, 0, 3, -1],
+    ],
+    // 兩個「三角岔路」：(南非,泰國,加拿大) 與 (肯亞,紐西蘭,義大利)。每個三角形的格子各有一條對外的「主幹」。
+    //  - 從主幹進入某格：可選往另外兩格之一。
+    //  - 從三角形內的另一格進入：視為已選定方向，只能走這格的主幹（不能再轉向第三格）。
+    tris: [['南非', '泰國', '加拿大'], ['肯亞', '紐西蘭', '義大利']],
+  };
 
-  const TILES = [START, ...RING, ...CENTER.filter((t) => t !== START)].map((t, id) => ({ id, ...t }));
+  // ======== 地圖二：愛心（29 格） ========
+  // 9×9 方格圖（欄 0~8、列 0~8，列 0 在最上面；程式內 y = 8 − 列）。
+  //   外圈 24 格：沿愛心輪廓繞一圈（起點在上方凹口）；中線 5 格：由起點一路連到下方的股市。
+  //   起點與股市各有三個方向（外圈兩側＋中線），走到那裡要選方向。樂透、休：目前是空格，之後再加玩法。
+  const hy = (row) => 8 - row;
+  const H_ = (col, row) => [col, hy(row)];
+  const HEART_RING = [
+    L('帛琉', 3, hy(1), 'oceania', 1700), L('紐西蘭', 2, hy(0), 'oceania', 1550), L('斐濟', 1, hy(1), 'oceania', 1550),
+    G('ruby', 1, hy(2), null), L('澳洲', 0, hy(2), 'oceania', 1800),
+    BL('樂透', 0, hy(3), '🎟️', '尚無效果'), L('埃及', 0, hy(4), 'africa', 1800),
+    G('emerald', 1, hy(5), null), L('肯亞', 1, hy(6), 'africa', 1450),
+    L('奈及利亞', 2, hy(7), 'africa', 1400), L('南非', 3, hy(8), 'africa', 1250),
+    S(4, hy(8)),
+    L('美國', 5, hy(8), 'america', 2000), L('墨西哥', 6, hy(7), 'america', 1350), L('加拿大', 7, hy(6), 'america', 1450),
+    G('topaz', 7, hy(5), null), L('巴西', 8, hy(4), 'america', 1300),
+    BL('樂透', 8, hy(3), '🎟️', '尚無效果'), L('泰國', 8, hy(2), 'asia', 1950),
+    G('sapphire', 7, hy(2), null), L('印度', 7, hy(1), 'asia', 1400),
+    L('日本', 6, hy(0), 'asia', 1900), L('中國', 5, hy(1), 'asia', 1650),
+  ];
+  const HEART_MID = [
+    L('英國', 4, hy(3), 'europe', 1850), L('法國', 4, hy(4), 'europe', 1600), BL('休', 4, hy(5), '💤', '尚無效果'),
+    L('德國', 4, hy(6), 'europe', 1750), L('義大利', 4, hy(7), 'europe', 1500),
+  ];
+  const HEART_START = START(4, hy(2));
+  // 順序：起點 → 外圈（由帛琉起順時針…依上面列的順序，最後回到中國再接起點）→ 中線
+  const HEART_LOOP = [HEART_START, ...HEART_RING];   // 外圈首尾相接成環：…中國 → 起點 → 帛琉 → 紐西蘭…
+  const HEART = {
+    id: 'heart', name: '愛心', desc: '29 格：愛心外圈＋中線；起點與股市各有三岔口；含樂透、休（暫無效果）', bounds: { x0: 0, x1: 8, y0: 0, y1: 8 }, panels: 'below',
+    tiles: [HEART_START, ...HEART_RING, ...HEART_MID],
+    links: [
+      ...HEART_LOOP.map((t, i) => [t.x, t.y, HEART_LOOP[(i + 1) % HEART_LOOP.length].x, HEART_LOOP[(i + 1) % HEART_LOOP.length].y]),
+      [4, hy(2), 4, hy(3)], ...HEART_MID.slice(1).map((t, i) => [HEART_MID[i].x, HEART_MID[i].y, t.x, t.y]), [4, hy(7), 4, hy(8)],   // 中線：起點 → 英國 → 法國 → 休 → 德國 → 義大利 → 股市
+    ],
+    tris: [],
+  };
+  const DEFS = { classic: CLASSIC, heart: HEART };
+
   // ---- 台灣地名版：就地改地區名稱與土地名稱（依各區土地在地圖定義中的順序對應）----
   const TW = {
     regions: { africa: '台北市', oceania: '新北市', asia: '台南市', america: '高雄市', europe: '台中市' },
@@ -52,36 +103,34 @@
       oceania: ['板橋區', '淡水區', '土城區', '新店區'],
     },
   };
-  const ORIG = { regions: Object.fromEntries(Object.keys(REGIONS).map((r) => [r, REGIONS[r].name])), tiles: TILES.map((t) => t.name) };
+  const TILES = [], ADJ = [], TRIS = [], BY = {};   // 換地圖時就地更新內容（引擎只保存這幾個陣列的參照）
+  const ORIGR = Object.fromEntries(Object.keys(REGIONS).map((r) => [r, REGIONS[r].name]));
+  let ORIG = { tiles: [] };
   function setLocale(tw) {
-    Object.keys(REGIONS).forEach((r) => (REGIONS[r].name = tw ? TW.regions[r] : ORIG.regions[r]));
+    Object.keys(REGIONS).forEach((r) => (REGIONS[r].name = tw ? TW.regions[r] : ORIGR[r]));
     const cnt = {};
     TILES.forEach((t) => { if (t.type === 'land') { const k = (cnt[t.region] = (cnt[t.region] || 0) + 1) - 1; t.name = tw ? TW.lands[t.region][k] : ORIG.tiles[t.id]; } });
   }
   const key = (x, y) => x + ',' + y;
-  const BY = {};
-  TILES.forEach((t) => (BY[key(t.x, t.y)] = t.id));
   const at = (x, y) => BY[key(x, y)];
-
-  const ADJ = TILES.map(() => []);
   const link = (a, b) => {
-    if (a === undefined || b === undefined || ADJ[a].includes(b)) return;
+    if (a === undefined || b === undefined || a === b || ADJ[a].includes(b)) return;
     ADJ[a].push(b); ADJ[b].push(a);
   };
-  RING.forEach((t, i) => link(at(t.x, t.y), at(RING[(i + 1) % RING.length].x, RING[(i + 1) % RING.length].y)));
-  CENTER.forEach((t, i) => i && link(at(CENTER[i - 1].x, CENTER[i - 1].y), at(t.x, t.y)));
-  // 中線兩端各接到外圈的兩個岔路點
-  [[-2, 0, -3, 1], [-2, 0, -3, -1], [2, 0, 3, 1], [2, 0, 3, -1]].forEach(([a, b, c, d]) => link(at(a, b), at(c, d)));
-
-  // 兩個「三角岔路」：(南非,泰國,加拿大) 與 (肯亞,紐西蘭,義大利)。
-  // 每個三角形的格子各有一條對外的「主幹」。
-  //  - 從主幹進入某格：可選往另外兩格之一。
-  //  - 從三角形內的另一格進入：視為已選定方向，只能走這格的主幹（不能再轉向第三格）。
   const nameId = (n) => TILES.find((t) => t.name === n).id;
-  const TRIS = [['南非', '泰國', '加拿大'], ['肯亞', '紐西蘭', '義大利']].map((g) => g.map(nameId));
+  function use(id) {
+    const d = DEFS[id] || CLASSIC;
+    TILES.length = 0; d.tiles.forEach((t, i) => TILES.push({ ...t, id: i }));
+    Object.keys(BY).forEach((k) => delete BY[k]); TILES.forEach((t) => (BY[key(t.x, t.y)] = t.id));
+    ADJ.length = 0; TILES.forEach(() => ADJ.push([]));
+    d.links.forEach(([x1, y1, x2, y2]) => link(at(x1, y1), at(x2, y2)));
+    TRIS.length = 0; (d.tris || []).forEach((g) => TRIS.push(g.map(nameId)));
+    ORIG = { tiles: TILES.map((t) => t.name) };
+    MAP.id = d.id; MAP.B = d.bounds; MAP.panels = d.panels;
+  }
 
   // 從 pos 出發的可選方向。prev = 上一格（來向）。
-  // atTurnStart 且在起點：左右皆可選；其餘情況不可回頭。
+  // atTurnStart 且在起點：所有方向皆可選；其餘情況不可回頭。三角岔路（若有）見上面的說明。
   function options(pos, prev, atTurnStart) {
     if (TILES[pos].type === 'start' && atTurnStart) return ADJ[pos].slice();
     const tri = TRIS.find((g) => g.includes(pos));
@@ -115,7 +164,8 @@
   // 股價隨行為浮動的幅度（比例）
   const IMPACT = { buyLand: 0.02, upgrade: 0.015, sellLand: 0.05, buyout: 0.02, toll: 0.02, perShare: 0.0005 };
 
-  const MAP = { setLocale, TW, REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
+  const MAP = { id: '', B: null, panels: 'center', LIST: Object.values(DEFS).map((d) => ({ id: d.id, name: d.name, desc: d.desc })), use, setLocale, TW, REGIONS, GEMS, TILES, ADJ, TRIS, at, options, LEVELS, LEVEL_NAMES, STOCK_REF, tollOf, upCost, GEM_KEYS, gemBonus, WIN_ASSETS, BUYOUT_MULT, BUYOUT_MAX_LV, IMPACT, PIC_NAMES, PIC_VER, PALETTE };
+  use(typeof __MAPID === 'string' ? __MAPID : 'classic');   // 伺服器為每一局指定地圖（__MAPID）；瀏覽器預設經典，進房間後依房間設定切換
   if (typeof module !== 'undefined') module.exports = MAP;
   else window.MAP = MAP;
 })();

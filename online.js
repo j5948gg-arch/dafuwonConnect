@@ -31,6 +31,7 @@ function connect() {
     if (m.t === 'notice') return toast(m.msg);
     if (m.t === 'none') { ROOM = null; STARTED = false; DRAW = null; return view(); }
     DRAW = m.draw || null;
+    if (m.map && MAP.id !== m.map) { MAP.use(m.map); relayout(); const bd = $('#bd'); if (bd) bd.innerHTML = ''; }   // 房間選的地圖（換地圖後重畫棋盤）
     if (m.now) SRVOFF = m.now - Date.now();   // 伺服器與本機的時間差（拍賣倒數用）
     ROOM = m.code; SEATS = m.seats; HOST = m.host; ME = m.you; STARTED = m.started; LRULES = m.rules || {};
     NAMES = m.seats.map((s) => s.name); AWAY = m.seats.map((s) => !!s.away); PIC = m.seats.map((s) => s.pic);
@@ -62,6 +63,8 @@ function lobbyHtml() {
     ? `<button onclick="tx({t:'ai'})" ${full ? 'disabled' : ''}>加入 1 個 AI</button><button onclick="tx({t:'aipro'})" ${full ? 'disabled' : ''}>加入高階 AI</button><button onclick="tx({t:'fillai'})" ${full ? 'disabled' : ''}>補滿 AI</button><button onclick="tx({t:'rmai'})">移除 AI</button><br>
        <button class="big" onclick="tx({t:'start'})" ${full ? '' : 'disabled'}>開始遊戲</button>${full ? '' : '<div style="font-size:12px">需滿 4 人才能開始，不足的位置可用 AI 補滿</div>'}`
     : '<div class="hint">等待房主開始遊戲…</div>';
+  const mapBox = `<div class="box"><b>地圖</b>${isHost ? '（房主選擇）' : '（由房主決定）'}`
+    + MAP.LIST.map((d) => `<label style="display:block;margin-top:4px"><input type="radio" name="mp" ${MAP.id === d.id ? 'checked' : ''} ${isHost ? '' : 'disabled'} onchange="tx({t:'map',id:'${d.id}'})"> <b>${d.name}</b><div style="font-size:12px;margin:0 0 2px 22px">${d.desc}</div></label>`).join('') + `</div>`;
   const rulesBox = `<div class="box"><b>特殊規則</b>${isHost ? '（房主可勾選；每一項都獨立，可任意組合）' : '（由房主決定）'}`
     + [...new Set(RULE_DEFS.map((d) => d.grp))].map((g) => `<div style="margin-top:6px;font-weight:700;font-size:12px;opacity:.7">${g}</div>`
       + RULE_DEFS.filter((d) => d.grp === g).map((d) => {
@@ -69,7 +72,7 @@ function lobbyHtml() {
         return `<label><input type="checkbox" ${LRULES[d.k] ? 'checked' : ''} ${dis ? 'disabled' : ''} onchange="setRule('${d.k}',this.checked)"> <b>${d.name}</b></label><div style="font-size:12px;margin:0 0 4px 22px">${d.desc}</div>`;
       }).join('')).join('') + `</div>`;
   // 左欄：房號、座位、選代表色與棋子、開始／離開；右欄：特殊規則（寬螢幕並排，不必往下捲才選得到角色；窄螢幕自動換行）
-  return `<div class="lobwrap"><div class="lobl"><div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${cpick}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button></div><div class="lobr">${rulesBox}</div></div>`;
+  return `<div class="lobwrap"><div class="lobl"><div class="box">房號<div class="code">${ROOM}</div><div style="font-size:12px">把房號給朋友，他們輸入 ID 與房號即可加入</div></div>${rows}${cpick}${picker}<div class="box">${ctl}</div><button onclick="tx({t:'leave'})">離開房間</button></div><div class="lobr">${mapBox}${rulesBox}</div></div>`;
 }
 function mk(t) {
   const name = $('#nm').value.trim(); if (!name) return alert('請輸入 ID');
