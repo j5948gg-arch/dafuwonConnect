@@ -356,7 +356,7 @@ function cardBox(){
 // 依目前地圖算出畫面大小。換地圖時（瀏覽器端）要再呼叫一次。
 function relayout(){const B=MAP.B;VW=PAD*2+W+(B.x1-B.x0)*SX;VH=PAD*2+H+(B.y1-B.y0)*SY;}
 relayout();
-const MINI_H=110;   // ★ 股價／持有數框的內容高度（像素）。要調高低只改這個數字；寬度跟著框的實際寬度，文字與間距會依高度（以 90 為基準）等比例縮放
+const MINI_H=130;   // ★ 股價／持有數框的內容高度（像素）。要調高低只改這個數字；寬度跟著框的實際寬度，文字與間距會依高度（以 90 為基準）等比例縮放
 const miniW=()=>{const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mini');return el&&el.clientWidth>200?el.clientWidth-8:480;};
 const IP={get stock(){return{x:0,y:0,w:miniW(),h:MINI_H};},get hold(){return{x:0,y:0,w:miniW(),h:MINI_H};}};
 let KSEL='idx';const setK=k=>{KSEL=k;render();};
