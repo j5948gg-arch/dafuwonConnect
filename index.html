@@ -22,12 +22,12 @@ button.big{background:var(--accent);color:#222;border:0;font-weight:700;font-siz
 button:disabled{opacity:.45;cursor:default}
 .dice{font-size:32px;font-weight:700}
 .hint{color:var(--accent);font-weight:700}
+.prow{display:flex;gap:8px;align-items:stretch}.pcol{flex:3 1 0;min-width:0}
+.rcol{flex:2 1 0;min-width:0;display:flex;flex-direction:column;min-height:260px;margin-bottom:8px}   /* 右欄：上半文字框、下半小地圖，兩者高度相加＝玩家資訊框 */
+.rcol>.box{flex:1 1 0;min-height:0;margin-bottom:0;box-sizing:border-box}.rcol>.box+.box{margin-top:8px}
 #log{font-size:12px;overflow:auto;line-height:1.6}
-.lrow{display:flex;gap:8px;align-items:stretch}.lrow>.box{min-width:0;margin-bottom:8px}
-.prow{display:flex;gap:8px;align-items:stretch}.logcol{flex:2 1 0;min-width:0;position:relative;min-height:184px;margin-bottom:8px}.pcol{flex:3 1 0;min-width:0}
-.logcol>#log{position:absolute;inset:0;margin:0;overflow:auto;box-sizing:border-box}   /* 文字欄寬度同原本，高度跟著右邊玩家資訊 */
-#mm{flex:2 1 0;display:flex;align-items:center;justify-content:center;padding:4px;overflow:hidden}#mm svg{display:block;width:100%;height:auto}
-#mini{flex:3 1 0;padding:4px;overflow:hidden}   /* 右下角：股價／持有數兩個分頁，內容填滿整個框 */
+#mm{position:relative;padding:0;overflow:hidden}#mm svg{position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px)}
+#mini{padding:4px;overflow:hidden}   /* 股價／持有數兩個分頁，內容填滿整個框 */
 .mtabs{display:flex;gap:4px;margin-bottom:4px}.mtabs button{flex:1;margin:0;padding:3px 0;font-size:12px}.mtabs button.on{background:var(--accent);color:#222;border-color:transparent;font-weight:700}
 .mbody svg{display:block;width:100%;height:auto}
 .rz{animation:rz 2.6s ease-in-out infinite}@keyframes rz{0%,100%{opacity:.1}50%{opacity:.8}}   /* 休息中玩家的土地：若隱若現的「休」字 */
