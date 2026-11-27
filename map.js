@@ -20,6 +20,7 @@
   const S = (x, y) => ({ name: '股市', x, y, type: 'stock' });
   const G = (gem, x, y, region) => ({ name: GEMS[gem].name, x, y, type: 'gem', gem, region: null }); // 所有寶石格的標籤一律顯示「特殊」
   const BL = (name, x, y, icon, sub) => ({ name, x, y, type: 'blank', icon, sub });   // 空格（之後再加特殊玩法）：目前踩到沒有任何效果
+  const FATE = (x, y) => ({ name: '命運', x, y, type: 'fate', icon: '🔮', sub: '隨機發生牌效果' });   // 命運格：停下就從 49 張牌隨機發生一張的效果（不翻牌、可重複；規則見 engine.js 的 fate()）
   const START = (x, y) => ({ name: '起點', x, y, type: 'start' });
   const LOT = (x, y) => ({ name: '樂透', x, y, type: 'lotto', icon: '🎟️', sub: '每號 500 元' });   // 樂透格：停下可選號（規則見 engine.js 的樂透區）
   const REST = (x, y) => ({ name: '休', x, y, type: 'rest', icon: '💤', sub: '停留免收過路費' });  // 休息格：停在這格期間，自己的土地別人踩到免付過路費
@@ -124,7 +125,75 @@
     ],
     tris: [],
   };
-  const DEFS = { classic: CLASSIC, heart: HEART, arrow: ARROW };
+
+  // ======== 地圖四：子彈（30 格） ========
+  // 6×9 方格圖（欄 0~5、列 0~8，列 0 在最上面；程式內 y = 8 − 列）。上下對稱，有「上、下兩個起點」。
+  //   左半：外弧（奈及利亞→肯亞→寶石→命運→寶石→中國→日本）＋中線（起點→美國→墨西哥→休→加拿大→巴西→起點）圍成左迴圈。
+  //   右半：第 4 欄由上到下貫穿（寶石…南非…樂透…泰國…寶石），股市在中線上連到樂透；紐西蘭、義大利是彈頭兩側的凸出，各與南非／帛琉、泰國／德國成三角。
+  //   命運格：停下時從 49 張牌隨機發生一張的效果（不翻牌、可重複抽到同一張）。
+  const uy = (row) => 8 - row;
+  const BU_START = START(2, uy(1));            // 上方起點（編號 0：玩家出生點）
+  const BU_TILES = [
+    L('斐濟', 3, uy(0), 'oceania', 1550), G('ruby', 4, uy(0), null),
+    L('奈及利亞', 1, uy(1), 'africa', 1400), BU_START, L('埃及', 3, uy(1), 'africa', 1800), L('南非', 4, uy(1), 'africa', 1250), L('紐西蘭', 5, uy(1), 'oceania', 1550),
+    L('肯亞', 0, uy(2), 'africa', 1450), L('美國', 2, uy(2), 'america', 2000), L('帛琉', 4, uy(2), 'oceania', 1700),
+    G('emerald', 0, uy(3), null), L('墨西哥', 2, uy(3), 'america', 1350), L('澳洲', 4, uy(3), 'oceania', 1800),
+    FATE(0, uy(4)), REST(2, uy(4)), S(3, uy(4)), LOT(4, uy(4)),
+    G('sapphire', 0, uy(5), null), L('加拿大', 2, uy(5), 'america', 1450), L('法國', 4, uy(5), 'europe', 1600),
+    L('中國', 0, uy(6), 'asia', 1650), L('巴西', 2, uy(6), 'america', 1300), L('德國', 4, uy(6), 'europe', 1750),
+    L('日本', 1, uy(7), 'asia', 1900), START(2, uy(7)), L('印度', 3, uy(7), 'asia', 1400), L('泰國', 4, uy(7), 'asia', 1950), L('義大利', 5, uy(7), 'europe', 1500),
+    L('英國', 3, uy(8), 'europe', 1850), G('topaz', 4, uy(8), null),
+  ];
+  const BULLET = {
+    id: 'bullet', name: '子彈', desc: '30 格：上下各一個起點，左邊是外弧加中線的迴圈，右邊是貫穿的彈身；含樂透、休、股市；命運格停下就隨機發生一張牌的效果', bounds: { x0: 0, x1: 5, y0: 0, y1: 8 }, panels: 'center',
+    tiles: [BU_START, ...BU_TILES.filter((t) => t !== BU_START)],   // 第一格必須是起點
+    links: [
+      // 上、下兩條橫線
+      [1, uy(1), 2, uy(1)], [2, uy(1), 3, uy(1)], [3, uy(1), 4, uy(1)], [4, uy(1), 5, uy(1)],
+      [1, uy(7), 2, uy(7)], [2, uy(7), 3, uy(7)], [3, uy(7), 4, uy(7)], [4, uy(7), 5, uy(7)],
+      // 頂端、底端的小方塊（斐濟＋寶石、英國＋寶石）
+      [3, uy(0), 4, uy(0)], [3, uy(0), 3, uy(1)], [4, uy(0), 4, uy(1)],
+      [3, uy(8), 4, uy(8)], [3, uy(8), 3, uy(7)], [4, uy(8), 4, uy(7)],
+      // 中線（第 2 欄）：上起點 → 美國 → 墨西哥 → 休 → 加拿大 → 巴西 → 下起點
+      ...[1, 2, 3, 4, 5, 6].map((r) => [2, uy(r), 2, uy(r + 1)]),
+      // 彈身（第 4 欄）：寶石 → 南非 → 帛琉 → 澳洲 → 樂透 → 法國 → 德國 → 泰國 → 寶石
+      ...[0, 1, 2, 3, 4, 5, 6, 7].map((r) => [4, uy(r), 4, uy(r + 1)]),
+      // 中間橫線：休 → 股市 → 樂透
+      [2, uy(4), 3, uy(4)], [3, uy(4), 4, uy(4)],
+      // 左外弧（第 0 欄）：肯亞 → 寶石 → 命運 → 寶石 → 中國
+      [0, uy(2), 0, uy(3)], [0, uy(3), 0, uy(4)], [0, uy(4), 0, uy(5)], [0, uy(5), 0, uy(6)],
+      // 斜線：外弧兩端、彈頭兩側的凸出
+      [1, uy(1), 0, uy(2)], [1, uy(7), 0, uy(6)], [5, uy(1), 4, uy(2)], [5, uy(7), 4, uy(6)],
+    ],
+    tris: [],
+  };
+
+  // ======== 地圖五：蝴蝶（29 格） ========
+  // 7×9 方格圖（欄 0~6、列 0~8，列 0 在最上面；程式內 y = 8 − 列）。起點在正中央，四個翅膀各是一個 6 格的小迴圈：
+  //   左上：寶石、南非、奈及利亞、股市、肯亞、埃及；右上：寶石、紐西蘭、澳洲、命運、斐濟、帛琉；
+  //   左下：寶石、中國、日本、樂透、泰國、印度；右下：寶石、義大利、英國、休、法國、德國。
+  //   身體：起點 ↔ 美國／加拿大／墨西哥／巴西（四個方向），再各連到相鄰翅膀的股市／命運／樂透／休。
+  const fy = (row) => 8 - row;
+  const BF_START = START(3, fy(4));
+  const BF_WING_TL = [L('南非', 1, fy(0), 'africa', 1250), L('奈及利亞', 2, fy(1), 'africa', 1400), S(2, fy(2)), L('肯亞', 1, fy(2), 'africa', 1450), L('埃及', 0, fy(1), 'africa', 1800), G('ruby', 0, fy(0), null)];
+  const BF_WING_TR = [L('紐西蘭', 5, fy(0), 'oceania', 1550), L('澳洲', 4, fy(1), 'oceania', 1800), FATE(4, fy(2)), L('斐濟', 5, fy(2), 'oceania', 1550), L('帛琉', 6, fy(1), 'oceania', 1700), G('emerald', 6, fy(0), null)];
+  const BF_WING_BL = [L('中國', 1, fy(8), 'asia', 1650), L('日本', 2, fy(7), 'asia', 1900), LOT(2, fy(6)), L('泰國', 1, fy(6), 'asia', 1950), L('印度', 0, fy(7), 'asia', 1400), G('sapphire', 0, fy(8), null)];
+  const BF_WING_BR = [L('義大利', 5, fy(8), 'europe', 1500), L('英國', 4, fy(7), 'europe', 1850), REST(4, fy(6)), L('法國', 5, fy(6), 'europe', 1600), L('德國', 6, fy(7), 'europe', 1750), G('topaz', 6, fy(8), null)];
+  const BF_BODY = [L('美國', 2, fy(3), 'america', 2000), L('加拿大', 4, fy(3), 'america', 1450), L('墨西哥', 2, fy(5), 'america', 1350), L('巴西', 4, fy(5), 'america', 1300)];
+  const BUTTERFLY = {
+    id: 'butterfly', name: '蝴蝶', desc: '29 格：起點在正中央，四個翅膀各一個小迴圈（各含寶石），身體連起點與四個翅膀；含股市、命運、樂透、休各一', bounds: { x0: 0, x1: 6, y0: 0, y1: 8 }, panels: 'center',
+    tiles: [BF_START, ...BF_WING_TL, ...BF_WING_TR, ...BF_WING_BL, ...BF_WING_BR, ...BF_BODY],
+    links: [
+      ...loopLinks(BF_WING_TL), ...loopLinks(BF_WING_TR), ...loopLinks(BF_WING_BL), ...loopLinks(BF_WING_BR),
+      // 身體：翅膀中間的特殊格 ↔ 美國／加拿大／墨西哥／巴西 ↔ 起點
+      [2, fy(2), 2, fy(3)], [2, fy(3), 3, fy(4)],   // 股市 ↔ 美國 ↔ 起點
+      [4, fy(2), 4, fy(3)], [4, fy(3), 3, fy(4)],   // 命運 ↔ 加拿大 ↔ 起點
+      [2, fy(6), 2, fy(5)], [2, fy(5), 3, fy(4)],   // 樂透 ↔ 墨西哥 ↔ 起點
+      [4, fy(6), 4, fy(5)], [4, fy(5), 3, fy(4)],   // 休 ↔ 巴西 ↔ 起點
+    ],
+    tris: [],
+  };
+  const DEFS = { classic: CLASSIC, heart: HEART, arrow: ARROW, bullet: BULLET, butterfly: BUTTERFLY };
 
   // ---- 台灣地名版：就地改地區名稱與土地名稱（依各區土地在地圖定義中的順序對應）----
   const TW = {

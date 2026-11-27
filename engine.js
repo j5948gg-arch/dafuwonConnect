@@ -80,6 +80,14 @@ function land(){
     else if(p.shield>0){p.shield--;log('護身符生效，免付過路費');}
     else{const amt=tollOf(t),o=owner[t.id];if(pay(turn,o,amt,'過路費',()=>{bump(t.region,IM.toll);if(RULES.div)payDiv(t,o,amt);})===false)return;}
   }
+  if(t.type==='fate'){fate();return;}   // 命運格：隨機發生一張牌的效果
+  render();
+}
+// 命運格：從 49 張牌隨機抽一張（每次都從全部 49 張抽、可重複）。不動牌堆；顯示圖卡、確認後才發生效果（走 cardShow／cardOk，AI 會自動確認）
+function fate(k){
+  const i=turn,idx=k===undefined?Math.random()*CARDS.length|0:k,cd=CARDS[idx];
+  lastCard=`🔮 命運：${cd.name}`;log(lastCard);
+  cardShow={s:-1,c:idx,by:i,n:1,a:0,b:0,fate:true};   // 和翻牌一樣：先顯示圖卡，按「確認」才執行效果（不標記牌堆、沒有橫向連線獎金）
   render();
 }
 function pay(from,to,amt,desc,after){
@@ -212,7 +220,7 @@ function buildCards(){
   RK.forEach((r,k)=>add(`獲得${k+1}區股票10張`,i=>addSt(i,r,10)));
   add('隨機獲得某區股票10張',i=>addSt(i,rnd(RK),10));
   add('隨機獲得某區股票20張',i=>addSt(i,rnd(RK),20));
-  add('所有人來到此寶石格',i=>{others(i).forEach(o=>{P[o].pos=P[i].pos;P[o].prev=teleportPrev(P[i].pos);});log('所有人來到此寶石格');});
+  add('所有人來到此寶石格',i=>{others(i).forEach(o=>{P[o].pos=P[i].pos;P[o].prev=teleportPrev(P[i].pos);});log(`所有人來到此${T[P[i].pos].type==='gem'?'寶石':'命運'}格`);});
   add('所有股價隨機波動±15%，每區單獨計算',()=>RK.forEach(r=>{const p=(Math.random()*30-15)/100;bump(r,p);log(`${RN(r)}股價隨機波動 ${p>=0?'+':''}${(p*100).toFixed(1)}%`);}));
   add('指定一區域股票上升10%',()=>pickR('哪一區股價上升 10%？',r=>bump(r,.1)));
   add('指定一區域股票下降10%',()=>pickR('哪一區股價下降 10%？',r=>bump(r,-.1)));
@@ -337,7 +345,7 @@ function cardArt(idx){
 function cardModal(){
   const cd=CARDS[cardShow.c],mine=ME<0||ME===cardShow.by,nm=cd.name;
   const hint=/隨機/.test(nm)?'🎲 對象由系統隨機決定':/指定|選擇|任一|某|隨意分配/.test(nm)?'👆 確認後由你選擇目標':'';
-  return `<div class="md"><div class="box cardm"><div class="cnum">#${cardShow.s+1}　<b style="color:${C[cardShow.by]}">${pn(cardShow.by)}</b> 翻到</div>${cardArt(cardShow.c)}<div class="ceff">${nm}</div>${hint?`<div class="csub">${hint}</div>`:''}${cardShow.n>=2?`<div class="csub">橫向連線 ${cardShow.n} 張，確認後可得獎金 ${100*cardShow.n}</div>`:''}${mine?'<button class="big" onclick="cardOk()">確認，執行效果</button>':`<div class="csub">等待 ${pn(cardShow.by)} 確認…</div>`}</div></div>`;
+  return `<div class="md"><div class="box cardm"><div class="cnum">${cardShow.fate?'🔮 命運':'#'+(cardShow.s+1)}　<b style="color:${C[cardShow.by]}">${pn(cardShow.by)}</b> ${cardShow.fate?'抽到':'翻到'}</div>${cardArt(cardShow.c)}<div class="ceff">${nm}</div>${hint?`<div class="csub">${hint}</div>`:''}${cardShow.n>=2?`<div class="csub">橫向連線 ${cardShow.n} 張，確認後可得獎金 ${100*cardShow.n}</div>`:''}${mine?'<button class="big" onclick="cardOk()">確認，執行效果</button>':`<div class="csub">等待 ${pn(cardShow.by)} 確認…</div>`}</div></div>`;
 }
 let CARD_OPEN=false;   // 翻牌區平常收起；玩家自己按「查看翻牌區」才展開（只影響自己的畫面）
 const toggleCards=()=>{CARD_OPEN=!CARD_OPEN;render();};
@@ -832,6 +840,7 @@ function tileSvg(t){
   if(t.type==='stock'){fill='#d4dae2';icon='📈';sub='可交易股票';}
   if(t.type==='start'){fill='#fff';icon='🏁';}
   if(t.type==='blank'){fill='#f1eee6';icon=t.icon||'';sub=t.sub||'';}   // 空格（沒有效果）
+  if(t.type==='fate'){fill='#dff3f0';icon=t.icon;sub=t.sub;}   // 命運格
   if(t.type==='lotto'){fill='#fff1c9';icon=t.icon;sub=t.sub;sub2=lotto?money(lotto.pot):'';}   // 樂透：格子上直接顯示目前獎金
   if(t.type==='rest'){fill='#e8e3f7';icon=t.icon;sub=t.sub;}
   const tc=(t.type==='gem'&&t.gem!=='topaz')?'#fff':'#222';
@@ -984,6 +993,7 @@ function render(){
       const l=lv[t.id]||0;
       act+=l>=5?(()=>{const ls=lands(turn).filter(x=>(lv[x.id]||0)<5&&x.id!==justBought&&!upIds.includes(x.id));return upFull()?'<div>S 級地：本回合已升級兩塊地</div>':ls.length?`<div class="hint">自己的 S 級地：可選擇兩塊持有的地各升級一級（還可升級 ${upCap()-upUsed} 塊）</div>`+ls.map(x=>`<button onclick="upgradeAt(${x.id})">${x.name} ${LV[lv[x.id]||0]}→${LV[(lv[x.id]||0)+1]} ${money(upOf(x))}</button>`).join(''):'<div>已是最高級 S（商業區），沒有其他可升級的土地</div>';})():justBought===t.id?'<div>剛買下，下次再踩到才能升級</div>':upFull()?'<div>本回合已升級過</div>':`<button class="big" onclick="upgradeAt(${t.id})">升級 ${LV[l]}→${LV[l+1]}（${MAP.LEVEL_NAMES[l+1]}）${money(upOf(t))}</button>`;
     }else if(t.type==='land')act+=(lv[t.id]||0)>MAP.BUYOUT_MAX_LV?`<div>此地為 ${LV[lv[t.id]||0]} 級，只有 E 級土地可被強制併購</div>`:`<button class="big" onclick="buyout()">強制併購 ${money(MAP.BUYOUT_MULT*t.price)}</button><div style="font-size:12px">原價×${MAP.BUYOUT_MULT}，付給${pn(own)}（僅限 E 級）</div>`;
+    if(t.type==='fate'&&/^🔮/.test(lastCard))act+=`<div>${lastCard}</div>`;
     if(t.type==='gem')act+=flipUsed?`<div>本回合已翻牌${lastCard?'：'+lastCard:''}</div>`:mustFlip()?'<div class="hint">請先翻牌，翻完才能結束回合</div>':'';
     if(t.type==='lotto')act+=lottoUsed?'<div>本回合已購買樂透</div>':!lottoFree().length?'<div>號碼已全部被選走</div>':LSKIP===landSeq?'<button onclick="LSKIP=-1;render()">🎟️ 選樂透號碼</button>':'<div class="hint">請在地圖上選樂透號碼（或按「不買了」）</div>';
     if(t.type==='start'){
