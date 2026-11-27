@@ -37,6 +37,7 @@ const stockVal=i=>RK.reduce((s,r)=>s+P[i].st[r]*stock[r],0);
 const landVal=t=>t.price+(inv[t.id]||0);
 const assets=i=>P[i].cash+stockVal(i)+lands(i).reduce((s,t)=>s+landVal(t),0);
 const tollOf=t=>Math.max(10,Math.round(MAP.tollOf(t,lv[t.id]||0,stock[t.region])*(tollMod[t.region]||1)*(landMod[t.id]||1)*(monoOwner(t.region)>=0?1.2:1)/10)*10);
+const tollMulOf=r=>((tollMod[r]||1)*(monoOwner(r)>=0?1.2:1)).toFixed(2);   // 該區過路費倍率（卡牌調整×獨佔 1.2）
 const upOf=t=>MAP.upCost(t,lv[t.id]||0,stock[t.region]);
 const hasStock=i=>RK.some(r=>P[i].st[r]>0);
 
